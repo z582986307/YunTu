@@ -278,6 +278,7 @@ async function main() {
     assert.strictEqual(modalTitle, '插入链接', '链接弹窗标题应为插入链接');
     await modalPage.click(titleInput);
     await modalPage.keyboard.type('字');
+    await modalPage.waitForFunction(() => document.querySelector('.link-title-remaining').textContent.trim() === '199/200');
     const firstCount = await modalPage.$eval('.link-title-remaining', node => node.textContent.trim());
     assert.strictEqual(firstCount, '199/200', '输入一个字后应显示剩余 199/200');
     await modalPage.keyboard.type('字'.repeat(200));

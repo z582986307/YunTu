@@ -33,11 +33,9 @@
 
     .do-group-history-icon {
       display: block;
-      position: relative;
-      left: -1px;
-      flex: 0 0 15px;
-      width: 15px;
-      height: 15px;
+      flex: 0 0 14px;
+      width: 14px;
+      height: 14px;
 
       &.redo {
         transform: scaleX(-1);
@@ -45,17 +43,9 @@
     }
 
     .do-group-label {
-      position: relative;
-      left: -1px;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 500;
       line-height: 1;
-    }
-
-    &:nth-child(2) {
-      color: #246fff;
-      background: #f0f5ff;
-      border-color: #a9c8ff;
     }
 
     &:hover {
@@ -84,9 +74,4 @@
     }
   }
 
-  > span:nth-child(2) .ant-btn-link {
-    color: #246fff;
-    background: #f0f5ff;
-    border-color: #a9c8ff;
-  }
 }
