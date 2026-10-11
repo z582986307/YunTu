@@ -6069,6 +6069,21 @@
               var shape = e.kityEvent.targetShape;
               if (shape.__KityClassName === 'Image' && shape.url) {
                 this.viewer.open(shape.url);
+                return;
+              }
+              var node = e.getTargetNode();
+              if (!node || !node.getData('image')) return;
+              var mouse = e.kityEvent.originEvent;
+              var images = node.getRenderContainer().node.querySelectorAll('image');
+              for (var i = 0; i < images.length; i++) {
+                var image = images[i];
+                if (image.getAttributeNS('http://www.w3.org/1999/xlink', 'href') !== node.getData('image')) continue;
+                var bounds = image.getBoundingClientRect();
+                if (mouse.clientX >= bounds.left && mouse.clientX <= bounds.right &&
+                    mouse.clientY >= bounds.top && mouse.clientY <= bounds.bottom) {
+                  this.viewer.open(node.getData('image'));
+                  break;
+                }
               }
             },
           },
@@ -6715,11 +6730,11 @@
             return node.getData('note');
           },
           update: function (icon, node, box) {
-            var x = box.right + node.getStyle('space-left');
+            var x = box.right + node.getStyle('space-right') + 2;
             var y = box.cy;
             icon.path.fill(node.getStyle('color'));
             icon.setTranslate(x, y);
-            return new kity.Box(x, Math.round(y - icon.height / 2), icon.width, icon.height);
+            return new kity.Box(x, box.y, icon.width, box.height);
           },
         });
         return {
@@ -8245,7 +8260,7 @@
             var viewport = km.getPaper().getViewPort();
             var offset = focusNode.getRenderContainer().getRenderBox('view');
             var dx = viewport.center.x - offset.x - offset.width / 2,
-              dy = viewport.center.y - offset.y;
+              dy = viewport.center.y - offset.y - offset.height / 2;
             var dragger = km._viewDragger;
             var duration = km.getOption('viewAnimationDuration');
             dragger.move(new kity.Point(dx, dy), duration);

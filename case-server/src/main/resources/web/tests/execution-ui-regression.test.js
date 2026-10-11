@@ -65,7 +65,7 @@ assert(colorPicker.includes("'#edf5ff'"), '节点背景色应提供浅蓝色快�
 assert(constants.includes("'byte-blue': '浅蓝'"), '当前主题入口应显示为中文“浅蓝”')
 assert(language.includes("'byte-blue': '浅蓝'"), '脑图语言包应将当前主题显示为中文“浅蓝”')
 assert(documentTemplate.includes('href="/favicon.svg"'), '网页标签应使用新的平台 favicon')
-assert(favicon.includes('aria-label="TestCaseManage"'), '网页标签 Logo 应与当前平台名称相关')
+assert(favicon.includes('aria-label="云图用例管理平台"'), '网页标签 Logo 应与当前平台名称相关')
 
 const caseMgt = fs.readFileSync(path.resolve(__dirname, '../src/components/case/casemgt/index.js'), 'utf8')
 const caseMgtStyles = fs.readFileSync(path.resolve(__dirname, '../src/components/case/casemgt/index.scss'), 'utf8')
@@ -97,7 +97,7 @@ assert(editor.includes('this.setState({ wsConnected: false, nowUseList: [] })'),
 assert(socket.includes('autoConnect: false'), 'Socket 应先注册监听器再连接，避免漏掉当前用户在线事件')
 assert(socket.includes('this.state.ws.connect()'), 'Socket 监听器注册完成后应显式建立连接')
 assert(caseMgtStyles.includes('.case-detail-save.ant-btn-primary') && caseMgtStyles.includes('border-radius: 10px;'), '顶部保存按钮应提供统一的圆角样式')
-assert(styles.includes('.testcasemanage-lock.ant-switch') && styles.includes('.ant-switch-inner'), '锁定和解锁图标应在开关内部居中')
+assert(styles.includes('.yuntu-lock.ant-switch') && styles.includes('.ant-switch-inner'), '锁定和解锁图标应在开关内部居中')
 assert(styles.includes('.ws-warning .ant-modal-content'), 'Web 通信断开弹窗应使用独立的 Chrome 风格圆角')
 assert(styles.includes('.ws-warning .ant-btn-primary'), 'Web 通信断开弹窗按钮应使用更大的圆角')
 assert(panel.includes('createExecutionResultIndex'), '执行悬浮窗应建立结果索引，避免每次选中都遍历整棵树')

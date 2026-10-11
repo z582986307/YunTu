@@ -7,7 +7,7 @@ import request from '@/utils/axios';
 import getQueryString from '@/utils/getCookies';
 import moment from 'moment';
 import { getSocketUrl } from '../../react-mindmap-editor/util/socketUrl';
-import TestCaseManageEditor from '../../react-mindmap-editor';
+import YunTuEditor from '../../react-mindmap-editor';
 
 const getCookies = getQueryString.getCookie;
 /* global staffNamePY */
@@ -43,36 +43,6 @@ export default class CaseMgt extends React.Component {
     }
   }
 
-  componentWillMount() {
-    // 拦截判断是否离开当前页面
-    window.addEventListener('beforeunload', this.handleAutoSave);
-  }
-  componentWillUnmount() {
-    // 销毁拦截判断是否离开当前页面
-    window.removeEventListener('beforeunload', this.handleAutoSave);
-  //  this.handleAutoSave();
-  }
-  ///case/getRequirement
-  handleAutoSave = () => {
-    // e.preventDefault();
-    // e.returnValue = '内容会被存储到浏览器缓存中！';
-    const { iscore } = this.props.match.params;
-    const minderData = this.editorNode
-      ? this.editorNode.getAllData()
-      : { base: 0 };
-    // 是否有ws链接断开弹窗
-    const hasBreak =
-      document.getElementsByClassName('ws-warning') &&
-      document.getElementsByClassName('ws-warning').length > 0;
-    if (Number(iscore) !== 2 && minderData && !hasBreak) {
-      // 非冒烟case才可保存
-      if (Number(minderData.base) > 1) {
-        message.warn('即将离开页面，自动保存当前用例。');
-        this.updateCase();
-      }
-    }
-
-  };
   getRequirementsById = requirementIds => {
     // request(`${this.props.oeApiPrefix}/business-lines/requirements`, {
     //   method: 'GET',
@@ -115,30 +85,6 @@ export default class CaseMgt extends React.Component {
     }).then(res => {
       if (res.code == 200) {
         this.setState({ recordDetail: res.data });
-      } else {
-        message.error(res.msg);
-      }
-    });
-  };
-
-  //保存用例
-  updateCase = () => {
-    let recordId =
-      this.props.match.params.itemid == 'undefined'
-        ? undefined
-        : this.props.match.params.itemid;
-
-    const param = {
-      id: this.props.match.params.caseId,
-      title: '更新内容，实际不会保存title',
-      recordId,
-      modifier: getCookies('username'),
-      caseContent: JSON.stringify(this.editorNode.getAllData()),
-    };
-    let url = `${this.props.doneApiPrefix}/case/update`;
-    request(url, { method: 'POST', body: param }).then(res => {
-      if (res.code == 200) {
-        message.success('保存内容成功');
       } else {
         message.error(res.msg);
       }
@@ -248,7 +194,7 @@ export default class CaseMgt extends React.Component {
           )) ||
             null}
            
-          <TestCaseManageEditor
+          <YunTuEditor
             ref={editorNode => (this.editorNode = editorNode)}
             tags={['前置条件', '执行步骤', '预期结果']}
             iscore={iscore}
@@ -268,14 +214,6 @@ export default class CaseMgt extends React.Component {
             wsUrl={getSocketUrl(window.location)}
             wsParam = {{ transports:['websocket','xhr-polling','jsonp-polling'], query: { caseId: caseId, recordId: itemid, user: user }}}
             // wsUrl={`ws://localhost:8094/api/case/${caseId}/${itemid}/${iscore}/${user}`}
-            onSave={
-              Number(iscore) !== 2
-                ? () => {
-                    message.loading('保存中......', 1);
-                    this.updateCase();
-                  }
-                : null
-            }
           />
         </div>
       </div>

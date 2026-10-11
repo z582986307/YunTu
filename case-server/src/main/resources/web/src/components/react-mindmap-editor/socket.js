@@ -69,6 +69,10 @@ class Socket extends React.Component {
             }
         });
 
+        websocket.on('save_ack_event', evt => {
+            if (typeof this.props.handleSaveAck === 'function') this.props.handleSaveAck(evt.message);
+        });
+
         websocket.on('edit_ack_event', async evt => {
             if (!(await this.waitForImport())) return;
             const recv = JSON.parse(evt.message || '{}');

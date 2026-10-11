@@ -1,6 +1,6 @@
 const path = require('path');
 const root = path.resolve(__dirname, '../../../../../..');
-const deps = path.join(root, '项目依赖/AgileTC-Web/node_modules');
+const deps = path.join(root, '项目依赖/YunTu-Web/node_modules');
 const webpack = require(path.join(deps, 'webpack'));
 const resolve = name => require.resolve(name, { paths: [deps] });
 webpack({

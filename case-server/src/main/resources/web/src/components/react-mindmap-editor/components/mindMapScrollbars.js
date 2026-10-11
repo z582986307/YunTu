@@ -78,12 +78,10 @@ class MindMapScrollbars extends Component {
     const { minder } = this.props;
     const dragger = minder.getViewDragger();
     const view = dragger.getView();
-    const target = minder.getRenderTarget();
-    const scale = axis === 'x' ? target.clientWidth / view.width : target.clientHeight / view.height;
     const movement = dragger.getMovement();
     dragger.moveTo(new window.kity.Point(
-      movement.x + (axis === 'x' ? (view.left - position) * scale : 0),
-      movement.y + (axis === 'y' ? (view.top - position) * scale : 0),
+      movement.x + (axis === 'x' ? view.left - position : 0),
+      movement.y + (axis === 'y' ? view.top - position : 0),
     ));
   };
 

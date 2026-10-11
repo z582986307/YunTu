@@ -34,7 +34,7 @@ version: '3'
 services:
   case-server:
     image: yestodayhadrain/case-server:v1.0.6
-    container_name: testcasemanage-caseserver
+    container_name: yuntu-caseserver
     env_file:
       - ./agile.env
     command: bash -c "cd /app/ && java -jar case-server-1.0-SNAPSHOT.jar"
@@ -48,7 +48,7 @@ services:
       - agile-net
   mysql:
     image: mysql:latest
-    container_name: testcasemanage-mysql
+    container_name: yuntu-mysql
     # 挂载到宿主机目录 /data/mysql/data 
     volumes:
       - /data/mysql/data:/var/lib/mysql

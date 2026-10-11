@@ -56,10 +56,14 @@ const ImageModal = (props) => {
     selectImage(file);
   };
 
+  React.useEffect(() => {
+    if (props.initialFile) selectImage(props.initialFile);
+  }, []);
+
   return (
     <Modal
       title="插入图片"
-      className="testcasemanage-modal"
+      className="yuntu-modal"
       visible={props.visible}
       onOk={onOk}
       onCancel={props.onCancel}

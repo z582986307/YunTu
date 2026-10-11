@@ -52,7 +52,9 @@ public class RecordEntity extends RoomEntity {
         }
         JSONObject jsonObject = TreeUtil.parse(testCase.getCaseContent());
         JSONObject jsonProgress = jsonObject.getJSONObject("progress");
-        jsonProgress.put("__expandState", collectExpandState(jsonObject.getJSONObject("root")));
+        JSONObject currentRoot = jsonObject.getJSONObject("content").getJSONObject("root");
+        jsonProgress.put("__expandState", collectExpandState(currentRoot));
+        jsonProgress.put("__notes", collectExecutionNotes(currentRoot));
         Integer totalCount = jsonObject.getInteger("totalCount");
         Integer passCount = jsonObject.getInteger("passCount");
         Integer failCount = jsonObject.getInteger("failCount");
@@ -86,7 +88,7 @@ public class RecordEntity extends RoomEntity {
         record.setSuccessCount(successCount);
         recordMapper.update(record);
 
-        LOGGER.info(Thread.currentThread().getName() + ": 数据库用例记录更新。record: " + record.getCaseContent());
+        LOGGER.info("数据库用例执行记录已更新，recordId={}", recordId);
     }
 
     private String mergeRecord(Long recordId, String caseContentStr, ExecRecordMapper execRecordMapper) {
@@ -137,15 +139,49 @@ public class RecordEntity extends RoomEntity {
 
             TreeUtil.mergeExecRecord(caseContent.getJSONObject("root"), recordObj, ExecCount);
             applyExpandState(caseContent.getJSONObject("root"), recordObj.getJSONObject("__expandState"));
+            applyExecutionNotes(caseContent.getJSONObject("root"), recordObj.getJSONObject("__notes"));
             retCaseContent = caseContent.toJSONString();
         } else {
             // 如果是全部的，那么直接把testcase 给 merge过来
             JSONObject caseContent = JSON.parseObject(caseContentStr);
             TreeUtil.mergeExecRecord(caseContent.getJSONObject("root"), recordObj, ExecCount);
             applyExpandState(caseContent.getJSONObject("root"), recordObj.getJSONObject("__expandState"));
+            applyExecutionNotes(caseContent.getJSONObject("root"), recordObj.getJSONObject("__notes"));
             retCaseContent = caseContent.toJSONString();
         }
         return retCaseContent;
+    }
+
+    private JSONObject collectExecutionNotes(JSONObject root) {
+        JSONObject notes = new JSONObject();
+        if (root == null) return notes;
+        Deque<JSONObject> pending = new ArrayDeque<>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            JSONObject node = pending.pop();
+            JSONObject data = node.getJSONObject("data");
+            if (data != null && data.getString("id") != null && data.getString("note") != null) {
+                notes.put(data.getString("id"), data.getString("note"));
+            }
+            JSONArray children = node.getJSONArray("children");
+            if (children != null) for (Object child : children) pending.push((JSONObject) child);
+        }
+        return notes;
+    }
+
+    private void applyExecutionNotes(JSONObject root, JSONObject notes) {
+        if (root == null || notes == null || notes.isEmpty()) return;
+        Deque<JSONObject> pending = new ArrayDeque<>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            JSONObject node = pending.pop();
+            JSONObject data = node.getJSONObject("data");
+            if (data != null && notes.containsKey(data.getString("id"))) {
+                data.put("note", notes.getString(data.getString("id")));
+            }
+            JSONArray children = node.getJSONArray("children");
+            if (children != null) for (Object child : children) pending.push((JSONObject) child);
+        }
     }
 
     private JSONObject collectExpandState(JSONObject root) {

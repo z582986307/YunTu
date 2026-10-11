@@ -150,10 +150,24 @@
   z-index: 9;
   display: inline-block;
   width: auto;
-  // padding: 6px 8px;
-  background-color: #fff;
-  border-radius: 4px;
-  box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+  background: transparent;
+  box-shadow: none;
+  &.direct-replace {
+    opacity: 0;
+  }
+  textarea.ant-input {
+    resize: none;
+    overflow: hidden;
+    padding: 4px 6px;
+    border: 0;
+    border-radius: 0;
+    outline: 0;
+    box-shadow: none;
+  }
+  textarea.ant-input:focus {
+    border: 0;
+    box-shadow: none;
+  }
 }
 .mindmap-node-image-delete {
   position: absolute;
@@ -237,7 +251,7 @@
     cursor: pointer;
   }
 }
-.testcasemanage-loader {
+.yuntu-loader {
   position: absolute;
   inset: 0;
   z-index: 80;
@@ -248,7 +262,7 @@
   height: 100%;
   background: #fff;
 }
-.testcasemanage-lock.ant-switch {
+.yuntu-lock.ant-switch {
   background-color: #61c663;
 
   .ant-switch-inner {

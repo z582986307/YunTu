@@ -18,8 +18,8 @@ const ClipboardRuntime = (minder, readOnly, onPasteImage) => {
     return kmencode(Data.getRegisterProtocol('json').encode(_nodes));
   };
   const isActive = (e) => {
-    const hasModal = document.getElementsByClassName('testcasemanage-modal').length > 0;
-    const hasDrawer = document.getElementsByClassName('testcasemanage-note-drawer').length > 0;
+    const hasModal = document.getElementsByClassName('yuntu-modal').length > 0;
+    const hasDrawer = document.getElementsByClassName('yuntu-note-drawer').length > 0;
     const hasNotePreviewer = document.getElementsByClassName('note-previewer').length > 0;
     return (
       !hasModal &&
@@ -116,8 +116,8 @@ const ClipboardRuntime = (minder, readOnly, onPasteImage) => {
   beforePaste = (e) => {
     const pastedImage = getClipboardImage(e.clipboardData);
     const selectedNodes = minder.getSelectedNodes();
-    const hasDialog = document.getElementsByClassName('testcasemanage-modal').length > 0 ||
-      document.getElementsByClassName('testcasemanage-note-drawer').length > 0;
+    const hasDialog = document.getElementsByClassName('yuntu-modal').length > 0 ||
+      document.getElementsByClassName('yuntu-note-drawer').length > 0;
     if (!readOnly && !hasDialog && pastedImage && selectedNodes.length === 1 &&
         (window.showEdit || isActive(e))) {
       e.preventDefault();

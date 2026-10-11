@@ -66,6 +66,35 @@ public class RecordEntityPersistenceTests {
         assertEquals(Integer.valueOf(9), leaf.getInteger("progress"));
     }
 
+    @Test
+    public void executionNoteSurvivesTaskRefreshWithUpdatedCaseText() {
+        TestCaseMapper caseMapper = mock(TestCaseMapper.class);
+        ExecRecordMapper recordMapper = mock(ExecRecordMapper.class);
+        TestCase source = new TestCase();
+        source.setId(2209L);
+        source.setCaseContent(caseContent(null));
+        ExecRecord record = new ExecRecord();
+        record.setId(900L);
+        record.setCaseContent("");
+        record.setExecutors("");
+        when(caseMapper.selectOne(2209L)).thenReturn(source);
+        when(recordMapper.selectOne(900L)).thenReturn(record);
+
+        RecordEntity opened = new RecordEntity("record-900", 2209L, caseMapper, 900L, recordMapper);
+        opened.setCaseContent(caseContent(9).replace("\"text\":\"case\"", "\"text\":\"case\",\"note\":\"执行备注\""));
+        assertTrue(opened.getCaseContent().contains("执行备注"));
+        opened.persistExecutionRecord("editor");
+        assertTrue(record.getCaseContent().contains("执行备注"));
+        source.setCaseContent(caseContent(null).replace("\"text\":\"case\"", "\"text\":\"新版用例\""));
+
+        RecordEntity refreshed = new RecordEntity("record-900-new", 2209L, caseMapper, 900L, recordMapper);
+        com.alibaba.fastjson.JSONObject leaf = JSON.parseObject(refreshed.getCaseContent())
+                .getJSONObject("root").getJSONArray("children").getJSONObject(0).getJSONObject("data");
+        assertEquals("新版用例", leaf.getString("text"));
+        assertEquals("执行备注", leaf.getString("note"));
+        assertEquals(Integer.valueOf(9), leaf.getInteger("progress"));
+    }
+
     private String caseContent(Integer progress) {
         String progressValue = progress == null ? "" : ",\"progress\":" + progress;
         return "{\"base\":1,\"root\":{\"data\":{\"id\":\"root\",\"text\":\"root\"},"

@@ -40,7 +40,7 @@ class Headers extends React.Component {
     return getCookies('username') ? (
       <Header style={{ zIndex: 9 }}>
         <a href="/" style={{ color: '#fff', fontSize: 24 }}>
-          TestCaseManage
+          云图用例管理平台
         </a>
         {getCookies('username') ? (
           <Dropdown overlay={menu} overlayClassName="dropStyle" placement="bottomLeft">

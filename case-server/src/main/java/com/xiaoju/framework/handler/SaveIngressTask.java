@@ -15,25 +15,51 @@ import java.util.concurrent.ExecutorService;
 public class SaveIngressTask extends IngressTask {
     EditMessage data;
     CaseBackupMapper caseBackupMapper;
+    boolean backup;
 
     public SaveIngressTask(SocketIOClient client, SocketIOServer socketIOServer, RoomEntity room, ExecutorService executorEgressService,
                            EditMessage data, CaseBackupMapper caseBackupMapper) {
         super(client, socketIOServer, room, executorEgressService);
         this.data = data;
         this.caseBackupMapper = caseBackupMapper;
+        this.backup = true;
+    }
+
+    public SaveIngressTask(SocketIOClient client, SocketIOServer socketIOServer, RoomEntity room, ExecutorService executorEgressService,
+                           EditMessage data, CaseBackupMapper caseBackupMapper, boolean backup) {
+        this(client, socketIOServer, room, executorEgressService, data, caseBackupMapper);
+        this.backup = backup;
     }
 
     @Override
     public void run() {
         // 1.更新内存中的用例
-        room.setCaseContent(data.getCaseContent());
+        try {
+            if (room instanceof RecordEntity) room.setCaseContent(data.getCaseContent());
+            else room.acceptSaveContent(data.getCaseContent());
+        } catch (Exception error) {
+            LOGGER.error("保存内容格式错误", error);
+            acknowledgeSave("error");
+            return;
+        }
+        if (!(room instanceof RecordEntity)) {
+            try {
+                room.persistCaseContent(client.getHandshakeData().getSingleUrlParam("user"));
+            } catch (Exception error) {
+                LOGGER.error("保存用例主数据失败", error);
+                acknowledgeSave("error");
+                return;
+            }
+        }
+        if (!backup) return;
 
+        try {
         // 2.保存到backup表
         LOGGER.info(Thread.currentThread().getName() + ": 手动保存用例。");
         CaseBackup caseBackup = new CaseBackup();
 
         caseBackup.setCaseId(room.getCaseId());
-        caseBackup.setCaseContent(data.getCaseContent());
+        caseBackup.setCaseContent(room.getCaseContent());
         caseBackup.setRecordContent("");
         caseBackup.setCreator(client.getHandshakeData().getSingleUrlParam("user"));
         caseBackup.setExtra("");
@@ -49,6 +75,7 @@ public class SaveIngressTask extends IngressTask {
                 String caseContent = caseBackups.get(0).getCaseContent();
                 if (JsonDiff.asJson(jsonMapper.readTree(caseContent), jsonMapper.readTree(caseBackup.getCaseContent())).size() == 0) { // 表示没有差别
                     LOGGER.info("当前内容已经保存过了，不再重复保存。");
+                    acknowledgeSave("ok");
                     return;
                 }
             }
@@ -58,12 +85,23 @@ public class SaveIngressTask extends IngressTask {
 
         int ret = caseBackupMapper.insert(caseBackup);
         if (ret < 1) {
-            LOGGER.error("用例备份落库失败. casebackup id: " + caseBackup.getCaseId() + ", case content: " + caseBackup.getCaseContent() );
+            LOGGER.error("用例备份落库失败. casebackup id: " + caseBackup.getCaseId());
+            acknowledgeSave("error");
             return;
         }
 
         LOGGER.info("备份保存当前用例。caseid:" + caseBackup.getCaseId());
 
         LOGGER.info(Thread.currentThread().getName() + ": 手动保存结束。");
+        acknowledgeSave("ok");
+        } catch (RuntimeException error) {
+            LOGGER.error("用例备份失败", error);
+            acknowledgeSave("error");
+        }
+    }
+
+    private void acknowledgeSave(String result) {
+        if (backup && !(room instanceof RecordEntity)) executorEgressService.submit(new AckEgressTask("save_ack_event",
+                PushMessage.builder().message(result).build(), client));
     }
 }

@@ -4,7 +4,7 @@ const http = require('http');
 const path = require('path');
 
 const root = path.resolve(__dirname, '../../../../../..');
-const deps = path.join(root, '项目依赖/AgileTC-Web/node_modules');
+const deps = path.join(root, '项目依赖/YunTu-Web/node_modules');
 const puppeteer = require(path.join(deps, 'puppeteer-core'));
 const editor = path.resolve(__dirname, '../src/components/react-mindmap-editor');
 const output = path.join(root, '运行日志/脑图性能/editor-build/editor.js');
@@ -45,12 +45,26 @@ async function main() {
     const origin = `http://127.0.0.1:${server.address().port}`;
     await page.goto(origin);
     await page.evaluate(async () => {
-      const data = { template: 'right', root: { data: { text: '根节点' }, children: [{ data: { text: '待插图用例' }, children: [] }] } };
+      const data = { template: 'right', root: { data: { text: '根节点' }, children: [{ data: { text: '待插图用例', image: '/sample.svg', imageSize: { width: 24, height: 24 } }, children: [] }] } };
       const instance = await window.mountTestEditor(data, true, { width: '100%', height: '900px' }, true);
       window.testEditor = instance;
       window.testMinder = instance.minder;
     });
     await page.waitForFunction(() => window.testMinder && window.testMinder.getRoot().children.length === 1, { timeout: 15000 });
+    const rootOffset = await page.evaluate(() => {
+      const canvas = document.querySelector('.kityminder-core-container').getBoundingClientRect();
+      const rootBox = window.testMinder.getRoot().getRenderContainer().getRenderBox('screen');
+      return { x: Math.round(rootBox.cx - (canvas.left + canvas.width / 2)), y: Math.round(rootBox.cy - (canvas.top + canvas.height / 2)) };
+    });
+    assert.ok(Math.abs(rootOffset.x) <= 24 && Math.abs(rootOffset.y) <= 24,
+      `刷新后中心主题应位于画布中央，实际偏移 ${JSON.stringify(rootOffset)}`);
+    await page.waitForSelector('svg image');
+    await page.waitForFunction(() => document.querySelector('svg image').getBoundingClientRect().width > 0, { timeout: 10000 });
+    await page.waitForTimeout(700);
+    await page.click('svg image');
+    await page.waitForSelector('.km-image-viewer');
+    await page.keyboard.press('Escape');
+    await page.waitForSelector('.km-image-viewer', { hidden: true });
     await page.evaluate(() => window.testMinder.select(window.testMinder.getRoot().children[0], true));
     const gap = await page.evaluate(() => {
       const core = document.querySelector('.kityminder-core-container').getBoundingClientRect();
@@ -94,6 +108,12 @@ async function main() {
     await page.waitForFunction(() => !window.testMinder.getRoot().children[0].getData('progress'));
     await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ctrlKey: true, keyCode: 89 })));
     await page.waitForFunction(() => window.testMinder.getRoot().children[0].getData('progress') === 9);
+    const beforeNoteHeight = await page.evaluate(() => window.testMinder.getRoot().children[0].getRenderBox().height);
+    await page.type('.execution-result-panel textarea', '本次执行备注');
+    await page.click('.execution-result-panel .execution-panel-footer button');
+    await page.waitForFunction(() => window.testMinder.getRoot().children[0].getData('note') === '本次执行备注');
+    const afterNoteHeight = await page.evaluate(() => window.testMinder.getRoot().children[0].getRenderBox().height);
+    assert.strictEqual(afterNoteHeight, beforeNoteHeight, '保存执行备注不能撑高节点');
     await page.evaluate(async () => {
       window.unmountTestEditor();
       const data = { template: 'right', root: { data: { text: '根节点' }, children: [{ data: { text: '待插图用例' }, children: [] }] } };
@@ -103,63 +123,74 @@ async function main() {
     });
     await page.waitForFunction(() => window.testMinder && window.testMinder.getRoot().children.length === 1);
     await page.evaluate(() => window.testMinder.select(window.testMinder.getRoot().children[0], true));
+    const saveProbe = await page.evaluate(async () => {
+      const sent = [];
+      window.testEditor.ws.sendMessage = (type, payload) => sent.push({ type, payload });
+      window.testMinder.getRoot().children[0].setText('已修改用例');
+      window.testMinder.fire('contentchange');
+      await new Promise(resolve => setTimeout(resolve, 1800));
+      const autoSave = sent.filter(item => item.type === 'autosave').length;
+      window.testEditor.onButtonSave();
+      return { autoSave, manualSave: sent.filter(item => item.type === 'save').length };
+    });
+    assert.deepStrictEqual(saveProbe, { autoSave: 1, manualSave: 1 }, '编辑后应自动保存，按钮应立即手动保存');
     const openImageModal = async () => {
       await page.click('button[aria-label="插入图片"]');
     };
 
     await openImageModal();
-    await page.waitForSelector('.testcasemanage-modal [aria-label="上传图片"]');
-    assert.strictEqual(await page.$('.testcasemanage-modal input[placeholder^="必填"]'), null);
-    await page.type('.testcasemanage-modal input[placeholder^="选填"]', 'a'.repeat(205));
-    assert.strictEqual(await page.$eval('.testcasemanage-modal input[placeholder^="选填"]', input => input.value.length), 200);
-    assert.ok((await page.$eval('.testcasemanage-modal', element => element.innerText)).includes('0/200'));
-    const input = await page.$('.testcasemanage-modal input[type="file"]');
+    await page.waitForSelector('.yuntu-modal [aria-label="上传图片"]');
+    assert.strictEqual(await page.$('.yuntu-modal input[placeholder^="必填"]'), null);
+    await page.type('.yuntu-modal input[placeholder^="选填"]', 'a'.repeat(205));
+    assert.strictEqual(await page.$eval('.yuntu-modal input[placeholder^="选填"]', input => input.value.length), 200);
+    assert.ok((await page.$eval('.yuntu-modal', element => element.innerText)).includes('0/200'));
+    const input = await page.$('.yuntu-modal input[type="file"]');
     await input.uploadFile(path.join(root, 'case-server/src/main/resources/web/dist/favicon.svg'));
-    await page.waitForFunction(url => document.querySelector('.testcasemanage-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-1.svg`);
-    await page.waitForSelector('.testcasemanage-modal [aria-label="图片预览"]');
-    await page.waitForSelector('.testcasemanage-modal [aria-label="删除已选图片"]:not([disabled])');
-    assert.strictEqual(await page.$eval('.testcasemanage-modal [aria-label="删除已选图片"]', button => button.textContent.trim()), '');
-    assert.strictEqual(await page.$eval('.testcasemanage-modal [aria-label="删除已选图片"]', button => getComputedStyle(button).position), 'absolute');
-    await page.waitForFunction(() => document.querySelector('.testcasemanage-modal [aria-label="删除已选图片"]')?.getBoundingClientRect().width >= 25);
-    await page.click('.testcasemanage-modal [aria-label="删除已选图片"]');
-    await page.waitForSelector('.testcasemanage-modal [aria-label="图片预览"]', { hidden: true });
-    const retryInput = await page.$('.testcasemanage-modal input[type="file"]');
+    await page.waitForFunction(url => document.querySelector('.yuntu-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-1.svg`);
+    await page.waitForSelector('.yuntu-modal [aria-label="图片预览"]');
+    await page.waitForSelector('.yuntu-modal [aria-label="删除已选图片"]:not([disabled])');
+    assert.strictEqual(await page.$eval('.yuntu-modal [aria-label="删除已选图片"]', button => button.textContent.trim()), '');
+    assert.strictEqual(await page.$eval('.yuntu-modal [aria-label="删除已选图片"]', button => getComputedStyle(button).position), 'absolute');
+    await page.waitForFunction(() => document.querySelector('.yuntu-modal [aria-label="删除已选图片"]')?.getBoundingClientRect().width >= 25);
+    await page.click('.yuntu-modal [aria-label="删除已选图片"]');
+    await page.waitForSelector('.yuntu-modal [aria-label="图片预览"]', { hidden: true });
+    const retryInput = await page.$('.yuntu-modal input[type="file"]');
     await retryInput.uploadFile(path.join(root, 'case-server/src/main/resources/web/dist/favicon.svg'));
-    await page.waitForFunction(url => document.querySelector('.testcasemanage-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-2.svg`);
-    await page.waitForSelector('.testcasemanage-modal [aria-label="图片预览"]');
-    await page.waitForSelector('.testcasemanage-modal .ant-modal-footer .ant-btn-primary:not([disabled])');
+    await page.waitForFunction(url => document.querySelector('.yuntu-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-2.svg`);
+    await page.waitForSelector('.yuntu-modal [aria-label="图片预览"]');
+    await page.waitForSelector('.yuntu-modal .ant-modal-footer .ant-btn-primary:not([disabled])');
     await page.waitForTimeout(400);
-    await page.click('.testcasemanage-modal .ant-modal-footer .ant-btn-primary');
+    await page.click('.yuntu-modal .ant-modal-footer .ant-btn-primary');
     await page.waitForFunction(url => window.testMinder.getRoot().children[0].getData('image') === url, {}, `${origin}/upload-2.svg`);
-    await page.waitForSelector('.testcasemanage-modal', { hidden: true });
+    await page.waitForSelector('.yuntu-modal', { hidden: true });
 
     await openImageModal();
-    await page.waitForSelector('.testcasemanage-modal [aria-label="粘贴图片"]');
+    await page.waitForSelector('.yuntu-modal [aria-label="粘贴图片"]');
     await page.evaluate(source => {
       const file = new File([source], 'pasted.svg', { type: 'image/svg+xml' });
       const clipboardData = new DataTransfer();
       clipboardData.items.add(file);
       document.querySelector('[aria-label="粘贴图片"]').dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
     }, svg);
-    await page.waitForFunction(url => document.querySelector('.testcasemanage-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-3.svg`);
-    await page.waitForSelector('.testcasemanage-modal [aria-label="图片预览"]');
-    await page.waitForSelector('.testcasemanage-modal [aria-label="删除已选图片"]:not([disabled])');
-    await page.waitForFunction(() => document.querySelector('.testcasemanage-modal [aria-label="删除已选图片"]')?.getBoundingClientRect().width >= 25);
-    await page.click('.testcasemanage-modal [aria-label="删除已选图片"]');
-    await page.waitForSelector('.testcasemanage-modal [aria-label="图片预览"]', { hidden: true });
+    await page.waitForFunction(url => document.querySelector('.yuntu-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-3.svg`);
+    await page.waitForSelector('.yuntu-modal [aria-label="图片预览"]');
+    await page.waitForSelector('.yuntu-modal [aria-label="删除已选图片"]:not([disabled])');
+    await page.waitForFunction(() => document.querySelector('.yuntu-modal [aria-label="删除已选图片"]')?.getBoundingClientRect().width >= 25);
+    await page.click('.yuntu-modal [aria-label="删除已选图片"]');
+    await page.waitForSelector('.yuntu-modal [aria-label="图片预览"]', { hidden: true });
     await page.evaluate(source => {
       const file = new File([source], 'pasted-again.svg', { type: 'image/svg+xml' });
       const clipboardData = new DataTransfer();
       clipboardData.items.add(file);
       document.querySelector('[aria-label="粘贴图片"]').dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData }));
     }, svg);
-    await page.waitForFunction(url => document.querySelector('.testcasemanage-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-4.svg`);
-    await page.waitForSelector('.testcasemanage-modal [aria-label="图片预览"]');
-    await page.waitForSelector('.testcasemanage-modal .ant-modal-footer .ant-btn-primary:not([disabled])');
+    await page.waitForFunction(url => document.querySelector('.yuntu-modal [aria-label="图片预览"]')?.src === url, {}, `${origin}/upload-4.svg`);
+    await page.waitForSelector('.yuntu-modal [aria-label="图片预览"]');
+    await page.waitForSelector('.yuntu-modal .ant-modal-footer .ant-btn-primary:not([disabled])');
     await page.waitForTimeout(400);
-    await page.click('.testcasemanage-modal .ant-modal-footer .ant-btn-primary');
+    await page.click('.yuntu-modal .ant-modal-footer .ant-btn-primary');
     await page.waitForFunction(url => window.testMinder.getRoot().children[0].getData('image') === url, {}, `${origin}/upload-4.svg`);
-    await page.waitForSelector('.testcasemanage-modal', { hidden: true });
+    await page.waitForSelector('.yuntu-modal', { hidden: true });
     await page.waitForSelector('svg image');
     await page.click('svg image');
     await page.waitForSelector('.km-image-viewer');
@@ -170,8 +201,9 @@ async function main() {
       bubbles: true, cancelable: true, key: 'Process', keyCode: 229,
     })));
     await page.waitForSelector('.edit-input:not(.hide) textarea');
+    assert.strictEqual(await page.$eval('.edit-input:not(.hide)', input => getComputedStyle(input).opacity), '0', '单击输入法组词期间不得回显编辑框');
     await page.evaluate(() => document.querySelector('.edit-input textarea').dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })));
-    assert.strictEqual(await page.evaluate(() => window.testMinder.getRoot().children[0].getText()), '待插图用例', '取消输入法选词不应清空节点');
+    assert.strictEqual(await page.evaluate(() => window.testMinder.getRoot().children[0].getText()), '已修改用例', '取消输入法选词不应清空节点');
     await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', {
       bubbles: true, cancelable: true, key: 'Process', keyCode: 229,
     })));
@@ -198,6 +230,12 @@ async function main() {
     await page.waitForFunction(() => window.testMinder.getRoot().children[0].getText() === '新名字');
     await page.evaluate(() => window.testEditor.handleShowInput());
     await page.waitForSelector('.edit-input:not(.hide) textarea');
+    const editAppearance = await page.$eval('.edit-input:not(.hide) textarea', input => ({
+      resize: getComputedStyle(input).resize,
+      border: getComputedStyle(input).borderWidth,
+      shadow: getComputedStyle(input.parentElement).boxShadow,
+    }));
+    assert.deepStrictEqual(editAppearance, { resize: 'none', border: '0px', shadow: 'none' }, '双击应在节点内无框编辑');
     const editState = await page.$eval('.edit-input:not(.hide) textarea', input => ({
       width: input.getBoundingClientRect().width,
       caret: input.selectionStart,
@@ -211,7 +249,17 @@ async function main() {
       data.items.add(file);
       document.querySelector('.edit-input textarea').dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
     }, svg);
-    await page.waitForFunction(url => window.testMinder.getRoot().children[0].getData('image') === url, {}, `${origin}/upload-5.svg`);
+    await page.waitForFunction(previous => {
+      const image = document.querySelector('.yuntu-modal [aria-label="图片预览"]');
+      return image && image.src !== previous;
+    }, {}, `${origin}/upload-4.svg`);
+    const directPasteUrl = await page.$eval('.yuntu-modal [aria-label="图片预览"]', image => image.src);
+    assert.notStrictEqual(await page.evaluate(() => window.testMinder.getRoot().children[0].getData('image')), directPasteUrl, '确认前不应改变节点图片');
+    await page.waitForSelector('.yuntu-modal .ant-modal-footer .ant-btn-primary:not([disabled])');
+    await page.waitForTimeout(400);
+    await page.click('.yuntu-modal .ant-modal-footer .ant-btn-primary');
+    await page.waitForFunction(url => window.testMinder.getRoot().children[0].getData('image') === url, {}, directPasteUrl);
+    await page.waitForSelector('.yuntu-modal', { hidden: true });
     assert.strictEqual(await page.$eval('.edit-input textarea', input => input.value), '新名字');
     await page.evaluate(() => {
       window.showEdit = false;
@@ -228,7 +276,16 @@ async function main() {
       data.items.add(file);
       document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data }));
     }, svg);
-    await page.waitForFunction(url => window.testMinder.getRoot().children[0].getData('image') === url, {}, `${origin}/upload-6.svg`);
+    await page.waitForFunction(previous => {
+      const image = document.querySelector('.yuntu-modal [aria-label="图片预览"]');
+      return image && image.src !== previous;
+    }, {}, directPasteUrl);
+    const selectedPasteUrl = await page.$eval('.yuntu-modal [aria-label="图片预览"]', image => image.src);
+    await page.waitForSelector('.yuntu-modal .ant-modal-footer .ant-btn-primary:not([disabled])');
+    await page.waitForTimeout(400);
+    await page.click('.yuntu-modal .ant-modal-footer .ant-btn-primary');
+    await page.waitForFunction(url => window.testMinder.getRoot().children[0].getData('image') === url, {}, selectedPasteUrl);
+    await page.waitForSelector('.yuntu-modal', { hidden: true });
     await page.evaluate(() => window.testMinder.execCommand('AppendChildNode', '新增主题'));
     await page.waitForFunction(() => window.testMinder.getRoot().children[0].children.length === 1);
     await page.evaluate(() => document.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ctrlKey: true, keyCode: 90 })));

@@ -1,5 +1,4 @@
 import React from 'react'
-import logoImg from './img/atclogo4.png'
 import getQueryString from '@/utils/getCookies'
 const getCookies = getQueryString.getCookie
 export const Banner30DataSource = {
@@ -12,9 +11,9 @@ export const Banner30DataSource = {
         className: 'banner3-slogan',
         children: (
           <div>
-            <img src={logoImg} className="banner3-logo" />
+            <img src="/favicon.svg" className="banner3-logo" alt="云图用例管理平台" />
             <br />
-            <span>TestCaseManage</span>
+            <span>云图用例管理平台</span>
           </div>
         ),
       },
@@ -23,7 +22,7 @@ export const Banner30DataSource = {
         className: 'banner3-name',
         children: (
           <span>
-            <p>一套敏捷的测试用例管理平台</p>
+            <p>用脑图协作管理测试用例</p>
           </span>
         ),
       },
@@ -59,7 +58,7 @@ export const Footer00DataSource = {
     children: (
       <span>
         <p>
-          <span>©2020 TestCaseManage</span>
+          <span>云图用例管理平台</span>
         </p>
       </span>
     ),

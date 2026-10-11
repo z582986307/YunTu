@@ -20,7 +20,7 @@ const LinkModal = (props) => {
   return (
     <Modal
       title="插入链接"
-      className="testcasemanage-modal"
+      className="yuntu-modal"
       visible={props.visible}
       onOk={onOk}
       onCancel={props.onCancel}

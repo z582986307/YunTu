@@ -4,7 +4,7 @@ const path = require('path');
 const http = require('http');
 const assert = require('assert');
 const root = path.resolve(__dirname, '../../../../../..');
-const deps = path.join(root, '项目依赖/AgileTC-Web/node_modules');
+const deps = path.join(root, '项目依赖/YunTu-Web/node_modules');
 const puppeteer = require(path.join(deps, 'puppeteer-core'));
 const editor = path.resolve(__dirname, '../src/components/react-mindmap-editor');
 const output = path.join(root, '运行日志/脑图性能');
@@ -150,14 +150,16 @@ async function main() {
         await page.mouse.move(to.x, to.y, { steps: 8 });
         await page.mouse.up();
       }
-      result.scrollbarReachedEnds = await page.evaluate(start => {
+      result.scrollbarEndEvidence = await page.evaluate(start => {
         const view = window.testMinder.getViewDragger().getView();
         const bounds = window.testMinder._paintGroups.getBounds();
-        return view.top > start.y + view.height
-          && (document.querySelector('.mindmap-scroll-track.horizontal') ? view.left > start.x + view.width && Math.abs(view.right - bounds.right) < view.width / 4 : true)
-          && Math.abs(view.bottom - bounds.bottom) < view.height / 4;
+        return { start, view, bounds, hasHorizontal: !!document.querySelector('.mindmap-scroll-track.horizontal') };
       }, scrollStart);
-      assert(result.scrollbarReachedEnds, '拖动滚动条未到达脑图右下边界');
+      const { start, view, bounds, hasHorizontal } = result.scrollbarEndEvidence;
+      result.scrollbarReachedEnds = view.top > start.y + view.height
+        && (hasHorizontal ? view.left > start.x + view.width && Math.abs(view.right - bounds.right) < view.width / 4 : true)
+        && Math.abs(view.bottom - bounds.bottom) < view.height / 4;
+      assert(result.scrollbarReachedEnds, `拖动滚动条未到达脑图右下边界：${JSON.stringify(result.scrollbarEndEvidence)}`);
       await page.waitForTimeout(1300);
       result.scrollbarAutoHidden = await page.evaluate(() => getComputedStyle(document.querySelector('.mindmap-scroll-track.vertical')).opacity === '0');
       assert(result.scrollbarAutoHidden, '停止滑动后滚动条未隐藏');

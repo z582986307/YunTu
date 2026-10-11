@@ -39,8 +39,6 @@ public class RoomEntity {
         if (StringUtils.isEmpty(res)) {
             LOGGER.error(Thread.currentThread().getName() + ": 用例内容为空");
             // todo: 此处需要走异常处理流程
-        } else {
-            LOGGER.info("case content is: " + testCase.getCaseContent());
         }
     }
 
@@ -56,29 +54,31 @@ public class RoomEntity {
         LOGGER.info("remove client, current user number:" + this.clientMap.size());
         if (this.clientMap.size() == 0) {
             try {
-                TestCase testCaseBase = caseMapper.selectOne(caseId);
-                JsonNode saveContent = jsonMapper.readTree(testCase.getCaseContent());
-                JsonNode baseContent = jsonMapper.readTree(testCaseBase.getCaseContent());
-                if (saveContent.get("base").asInt() > baseContent.get("base").asInt()) {
-                    // 保存落库
-                    TestCase testCaseToUpdate = this.testCase;
-                    TreeUtil.caseDFSValidate(saveContent.get("root"));
-                    testCaseToUpdate.setCaseContent(saveContent.toString());
-                    testCaseToUpdate.setGmtModified(new Date(System.currentTimeMillis()));
-                    testCaseToUpdate.setModifier(client.getHandshakeData().getSingleUrlParam("user"));
-                    int ret = caseMapper.update(testCaseToUpdate);
-                    if (ret < 1) {
-                        LOGGER.error(Thread.currentThread().getName() + ": 数据库用例内容更新失败。 ret = " + ret);
-                        LOGGER.error("应该保存的用例内容是：" + saveContent);
-                    }
-                } else {
-                    // 不保存
-                    LOGGER.info(Thread.currentThread().getName() + "不落库." + saveContent);
-                }
+                persistCaseContent(client.getHandshakeData().getSingleUrlParam("user"));
             } catch (Exception e) {
-                e.printStackTrace();
+                LOGGER.error("离开页面时保存用例失败", e);
             }
         }
+    }
+
+    public synchronized boolean persistCaseContent(String modifier) throws Exception {
+        JsonNode saveContent = jsonMapper.readTree(testCase.getCaseContent());
+        TestCase stored = caseMapper.selectOne(caseId);
+        if (stored == null) throw new IllegalStateException("用例不存在");
+        JsonNode storedContent = jsonMapper.readTree(stored.getCaseContent());
+        int saveVersion = saveContent.path("base").asInt();
+        int storedVersion = storedContent.path("base").asInt();
+        if (saveVersion < storedVersion ||
+                (saveVersion == storedVersion && !saveContent.equals(storedContent))) {
+            throw new IllegalStateException("用例版本冲突，不能覆盖数据库");
+        }
+        if (saveContent.equals(storedContent)) return true;
+        TreeUtil.caseDFSValidate(saveContent.get("root"));
+        stored.setCaseContent(saveContent.toString());
+        stored.setGmtModified(new Date());
+        stored.setModifier(modifier);
+        if (caseMapper.update(stored) < 1) throw new IllegalStateException("用例内容更新失败");
+        return true;
     }
 
     public int getClientNum() {
@@ -127,6 +127,18 @@ public class RoomEntity {
     }
 
     public void setCaseContent(String caseContent) {
+        this.testCase.setCaseContent(caseContent);
+    }
+
+    public synchronized void acceptSaveContent(String caseContent) throws Exception {
+        JsonNode incoming = jsonMapper.readTree(caseContent);
+        JsonNode current = jsonMapper.readTree(testCase.getCaseContent());
+        int incomingVersion = incoming.path("base").asInt();
+        int currentVersion = current.path("base").asInt();
+        if (incomingVersion < currentVersion ||
+                (incomingVersion == currentVersion && !incoming.equals(current))) {
+            throw new IllegalStateException("用例版本冲突，请刷新后重试");
+        }
         this.testCase.setCaseContent(caseContent);
     }
 }

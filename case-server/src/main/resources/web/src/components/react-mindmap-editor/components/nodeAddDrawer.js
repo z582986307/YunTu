@@ -39,7 +39,7 @@ const NoteAddDrawer = (props) => {
     <Drawer
       title={`${minder.getSelectedNodes()[0].data.text}`}
       placement="right"
-      className="testcasemanage-note-drawer"
+      className="yuntu-note-drawer"
       maskClosable={false}
       onClose={onCancel}
       visible={visible}

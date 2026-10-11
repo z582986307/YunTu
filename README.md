@@ -1,14 +1,14 @@
 English | [简体中文](./README_zh-CN.md)
 
-## TestCaseManage
+## YunTu · 云图用例管理平台
 
 ![image](https://dpubstatic.udache.com/static/dpubimg/RQnYIFAwEd/logo.png)
 
-[![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)[![GitHub issues](https://img.shields.io/github/issues/didi/AgileTC.svg)](https://github.com/didi/AgileTC/issues)
+[![License](https://img.shields.io/badge/license-Apache%202-4EB1BA.svg)](https://www.apache.org/licenses/LICENSE-2.0.html)[![GitHub issues](https://img.shields.io/github/issues/z582986307/YunTu.svg)](https://github.com/z582986307/YunTu/issues)
 
 ### Introduction
 
-TestCaseManage - A test case management platform with multi-user real-time collaboration based on mind maps.
+YunTu - A test case management platform with multi-user real-time collaboration based on mind maps.
 
 ### Project Description:
 
@@ -18,17 +18,17 @@ With the rapid business iteration, the efficiency requirements for each link of 
 
 The industry's more reliable use case management platforms, such as test-link, QC, Zen Tao, etc., all adopt traditional use case management methods, similar to excel operating experience, and the test case writing process is more cumbersome, which is similar to the mind map management method commonly used in current business It does not match, nor does it meet the demands of current business rapid iteration. Therefore, we need a complete test case management system to meet daily test requirements.
 
-TestCaseManage is an agile online test case management platform that supports test case collection management, hierarchical case management, task management, schedule calculation, and multi-person collaboration.
+YunTu is an online test case management platform that supports test case collection management, hierarchical case management, task management, schedule calculation, and multi-person collaboration.
 
 ### Function
 
 #### Test case set management
 
-TestCaseManage can associate use case sets with requirements, supports xmind/xmind zen import/export, and provides rich search capabilities.
+YunTu can associate use case sets with requirements, supports xmind/xmind zen import/export, and provides rich search capabilities.
 
 #### Use case edit
 
-TestCaseManage supports real-time collaborative editing of use case sets. Changes are synchronized to other clients, with priorities, custom labels, connection health checks, and automatic saving.
+YunTu supports real-time collaborative editing of use case sets. Changes are synchronized to other clients, with priorities, custom labels, connection health checks, and automatic saving.
 
 #### Test task management
 
@@ -69,7 +69,7 @@ Users can circle the test cases according to their priority and tags, and combin
 
 #### Download
 
-* git clone https://github.com/didi/AgileTC.git 
+* git clone https://github.com/z582986307/YunTu.git 
   Or download ZIP directly
 
 #### Prepare
