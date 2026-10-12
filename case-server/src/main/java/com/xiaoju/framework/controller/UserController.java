@@ -1,9 +1,11 @@
 package com.xiaoju.framework.controller;
 
 import com.xiaoju.framework.entity.request.auth.UserLoginReq;
+import com.xiaoju.framework.entity.request.auth.UserPasswordChangeReq;
 import com.xiaoju.framework.entity.request.auth.UserRegisterReq;
 import com.xiaoju.framework.entity.response.controller.Response;
 import com.xiaoju.framework.service.UserService;
+import com.xiaoju.framework.util.CookieUtils;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -48,5 +50,12 @@ public class UserController {
     @PostMapping("/quit")
     public Response<?> logout(HttpServletRequest request,HttpServletResponse response) {
         return Response.success(userService.logout(request, response));
+    }
+
+    @PostMapping("/changePassword")
+    public Response<?> changePassword(@RequestBody UserPasswordChangeReq req, HttpServletRequest request) {
+        String username = CookieUtils.getCookieValue(request, "username", true);
+        userService.changePassword(username, req);
+        return Response.success();
     }
 }

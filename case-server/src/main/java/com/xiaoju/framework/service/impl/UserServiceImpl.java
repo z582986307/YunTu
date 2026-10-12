@@ -6,6 +6,7 @@ import com.xiaoju.framework.entity.dto.Authority;
 import com.xiaoju.framework.entity.dto.User;
 import com.xiaoju.framework.entity.exception.CaseServerException;
 import com.xiaoju.framework.entity.request.auth.UserLoginReq;
+import com.xiaoju.framework.entity.request.auth.UserPasswordChangeReq;
 import com.xiaoju.framework.entity.request.auth.UserRegisterReq;
 import com.xiaoju.framework.mapper.AuthorityMapper;
 import com.xiaoju.framework.mapper.UserMapper;
@@ -46,6 +47,21 @@ public class UserServiceImpl implements UserService {
 
     @Resource
     private AuthorityMapper authorityMapper;
+
+    @Override
+    public void changePassword(String username, UserPasswordChangeReq req) {
+        if (StringUtils.isEmpty(username) || req == null ||
+                StringUtils.isEmpty(req.getOldPassword()) || StringUtils.isEmpty(req.getNewPassword())) {
+            throw new CaseServerException("请填写旧密码和新密码", StatusCode.INTERNAL_ERROR);
+        }
+        User user = userMapper.selectByUserName(username);
+        if (user == null || !user.getPassword().equals(CodecUtils.md5Hex(req.getOldPassword(), user.getSalt()))) {
+            throw new CaseServerException("旧密码错误", StatusCode.INTERNAL_ERROR);
+        }
+        user.setSalt(CodecUtils.generateSalt());
+        user.setPassword(CodecUtils.md5Hex(req.getNewPassword(), user.getSalt()));
+        userMapper.updateByPrimaryKeySelective(user);
+    }
 
     @Override
     public Integer register(UserRegisterReq req, HttpServletRequest request, HttpServletResponse response) {

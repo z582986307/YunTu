@@ -1,6 +1,7 @@
 package com.xiaoju.framework.service;
 
 import com.xiaoju.framework.entity.request.auth.UserLoginReq;
+import com.xiaoju.framework.entity.request.auth.UserPasswordChangeReq;
 import com.xiaoju.framework.entity.request.auth.UserRegisterReq;
 
 import javax.servlet.http.HttpServletRequest;
@@ -14,6 +15,7 @@ public interface UserService {
     Integer register(UserRegisterReq req, HttpServletRequest request, HttpServletResponse response);
     Integer login(UserLoginReq req, HttpServletRequest request, HttpServletResponse response);
     Integer logout(HttpServletRequest request, HttpServletResponse response);
+    void changePassword(String username, UserPasswordChangeReq req);
 
     /**
      * 获取用户对应权限的路径匹配列表

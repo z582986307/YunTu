@@ -122,7 +122,7 @@
         salt = #{salt,jdbcType=VARCHAR},
       </if>
       <if test="authorityName != null">
-        authority_name,
+        authority_name = #{authorityName,jdbcType=VARCHAR},
       </if>
       <if test="isDelete != null">
         is_delete = #{isDelete,jdbcType=INTEGER},
