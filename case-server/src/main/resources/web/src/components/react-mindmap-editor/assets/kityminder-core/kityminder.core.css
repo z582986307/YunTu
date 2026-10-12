@@ -50,8 +50,10 @@
 }
 
 .km-image-viewer .km-image-viewer-container img {
-    cursor: zoom-out;
+    cursor: default;
     vertical-align: middle;
+    max-width: none;
+    max-height: none;
 }
 
 .km-image-viewer .km-image-viewer-container img.limited {
@@ -90,4 +92,23 @@
 
 .km-image-viewer .km-image-viewer-close {
     background-position: 0 -44px;
+}
+
+.km-image-viewer .km-image-viewer-zoom-in,
+.km-image-viewer .km-image-viewer-zoom-out,
+.km-image-viewer .km-image-viewer-zoom-reset {
+    min-width: 36px;
+    height: 36px;
+    margin: 4px;
+    border: 1px solid rgba(255, 255, 255, .45);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
+    cursor: pointer;
+    font-size: 18px;
+}
+
+.km-image-viewer .km-image-viewer-zoom-reset {
+    padding: 0 10px;
+    font-size: 13px;
 }

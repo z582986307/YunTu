@@ -6002,23 +6002,44 @@
           constructor: function () {
             var btnClose = createEl('button', 'km-image-viewer-btn km-image-viewer-close');
             var btnSource = createEl('button', 'km-image-viewer-btn km-image-viewer-source');
+            var btnZoomIn = createEl('button', 'km-image-viewer-zoom-in');
+            var btnZoomOut = createEl('button', 'km-image-viewer-zoom-out');
+            var btnZoomReset = createEl('button', 'km-image-viewer-zoom-reset');
+            btnZoomIn.textContent = '+';
+            btnZoomOut.textContent = '−';
+            btnZoomReset.textContent = '还原';
+            btnZoomIn.title = '放大';
+            btnZoomOut.title = '缩小';
+            btnZoomReset.title = '还原尺寸';
             var image = (this.image = createEl('img'));
             var toolbar = (this.toolbar = createEl('div', 'km-image-viewer-toolbar', [
+              btnZoomIn,
+              btnZoomOut,
+              btnZoomReset,
               btnSource,
               btnClose,
             ]));
-            var container = createEl('div', 'km-image-viewer-container', [image]);
+            var container = (this.container = createEl('div', 'km-image-viewer-container', [image]));
             var viewer = (this.viewer = createEl('div', 'km-image-viewer', [toolbar, container]));
             this.hotkeyHandler = this.hotkeyHandler.bind(this);
             on(btnClose, 'click', this.close.bind(this));
             on(btnSource, 'click', this.viewSource.bind(this));
-            on(image, 'click', this.zoomImage.bind(this));
+            on(btnZoomIn, 'click', this.zoomImage.bind(this, 1.25));
+            on(btnZoomOut, 'click', this.zoomImage.bind(this, 0.8));
+            on(btnZoomReset, 'click', this.resetZoom.bind(this));
+            on(container, 'click', function (e) {
+              if (e.target === container) this.close();
+            }.bind(this));
+            container.addEventListener('wheel', function (e) {
+              e.preventDefault();
+              this.zoomImage(e.deltaY < 0 ? 1.25 : 0.8);
+            }.bind(this), { passive: false });
             on(viewer, 'contextmenu', this.toggleToolbar.bind(this));
             on(document, 'keydown', this.hotkeyHandler);
           },
           dispose: function () {
             this.close();
-            document.removeEventListener('remove', this.hotkeyHandler);
+            document.removeEventListener('keydown', this.hotkeyHandler);
           },
           hotkeyHandler: function (e) {
             if (!this.actived) {
@@ -6032,13 +6053,19 @@
             e && e.preventDefault();
             this.toolbar.classList.toggle('hidden');
           },
-          zoomImage: function (restore) {
-            var image = this.image;
-            if (typeof restore === 'boolean') {
-              restore && addClass(image, 'limited');
-            } else {
-              image.classList.toggle('limited');
-            }
+          zoomImage: function (factor) {
+            if (!this.image.naturalWidth || !this.image.naturalHeight) return;
+            if (!this.scale) this.resetZoom();
+            this.scale = Math.max(0.1, Math.min(10, this.scale * factor));
+            this.image.style.width = (this.image.naturalWidth * this.scale) + 'px';
+            this.image.style.height = (this.image.naturalHeight * this.scale) + 'px';
+          },
+          resetZoom: function () {
+            this.scale = Math.min(1,
+              (this.container.clientWidth - 32) / (this.image.naturalWidth || 1),
+              (this.container.clientHeight - 64) / (this.image.naturalHeight || 1));
+            this.image.style.width = (this.image.naturalWidth * this.scale) + 'px';
+            this.image.style.height = (this.image.naturalHeight * this.scale) + 'px';
           },
           viewSource: function (src) {
             window.open(this.image.src);
@@ -6050,13 +6077,15 @@
               input.blur();
             }
             this.image.src = src;
-            this.zoomImage(true);
             document.body.appendChild(this.viewer);
             this.actived = true;
+            this.image.onload = this.resetZoom.bind(this);
+            if (this.image.complete && this.image.naturalWidth) this.resetZoom();
           },
           close: function () {
             this.image.src = '';
-            document.body.removeChild(this.viewer);
+            this.image.onload = null;
+            if (this.viewer.parentNode) this.viewer.parentNode.removeChild(this.viewer);
             this.actived = false;
           },
         });

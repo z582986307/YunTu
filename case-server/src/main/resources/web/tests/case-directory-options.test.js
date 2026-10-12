@@ -12,11 +12,12 @@ jest.mock('antd', () => ({
   Col: () => null,
 }));
 jest.mock('umi/router', () => ({}));
-jest.mock('@/utils/axios', () => () => Promise.resolve({ data: null }));
+jest.mock('@/utils/axios', () => jest.fn(() => Promise.resolve({ code: 200, data: null })));
 jest.mock('@/utils/getCookies', () => ({ getCookie: () => '' }));
 jest.mock('../src/components/case/caselist/testcase-template.xlsx', () => 'template');
 
 const CaseModal = require('../src/components/case/caselist/caseModal').default;
+const request = require('@/utils/axios');
 
 test('目录选项显示名称与左侧目录一致，保留原 ID', () => {
   const modal = new CaseModal({ show: false, productId: 1 });
@@ -28,4 +29,14 @@ test('目录选项显示名称与左侧目录一致，保留原 ID', () => {
     { id: -1, title: '未分类用例' },
     { id: 7, title: '客户管理' },
   ]);
+});
+
+test('用例目录单选值保存为单个目录 ID', async () => {
+  const modal = new CaseModal({ show: false, productId: 1, doneApiPrefix: '', onUpdate: () => {} });
+  modal.state.data = { id: 10 };
+  modal.renameOk({ case: '用例', bizId: 7, description: '' });
+  await Promise.resolve();
+  expect(request).toHaveBeenCalledWith('/case/edit', expect.objectContaining({
+    body: expect.objectContaining({ bizId: '7' }),
+  }));
 });

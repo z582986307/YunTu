@@ -143,7 +143,7 @@ class CaseModal extends React.Component {
       caseContent: initData,
       title: values.case,
       channel: 1,
-      bizId: values.bizId ? values.bizId.join(',') : '-1',
+      bizId: values.bizId != null ? String(values.bizId) : '-1',
       id: this.state.operate != 'add' ? this.props.data.id : '',
       requirementId,
       description: values.description,
@@ -169,7 +169,7 @@ class CaseModal extends React.Component {
 
       params.append('description', values.description);
       params.append('channel', 1);
-      params.append('bizId', values.bizId ? values.bizId.join(',') : '-1');
+      params.append('bizId', values.bizId != null ? String(values.bizId) : '-1');
     }
     request(url, { method: 'POST', body: params }).then(res => {
       if (res.code == 200) {
@@ -206,7 +206,7 @@ class CaseModal extends React.Component {
       caseType: 0,
       description: values.description,
       modifier: getCookies('username'),
-      bizId: values.bizId ? values.bizId.join(',') : '-1',
+      bizId: values.bizId != null ? String(values.bizId) : '-1',
       channel: 1,
     };
 
@@ -313,16 +313,15 @@ class CaseModal extends React.Component {
               this.state.operate === 'add'
                 ? this.props.caseIds.length === 1 &&
                   this.props.caseIds[0] === 'root'
-                  ? [-1]
-                  : this.props.caseIds
-                : bizIds,
+                  ? -1
+                  : this.props.caseIds[0]
+                : bizIds[0],
           })(
             <TreeSelect
               style={{ width: '100%' }}
               dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
               placeholder="请选择用例目录"
               allowClear
-              multiple
               treeDefaultExpandAll
             >
               {this.renderTreeNodes(this.state.cardTree)}
