@@ -26,3 +26,10 @@ export const uploadImage = (file, baseUrl = '', uploadUrl = '') => {
     return response.json()
   }).then(getUploadedImageUrl)
 }
+
+export const pasteImageIntoNode = (file, node, minder, baseUrl = '', uploadUrl = '') =>
+  uploadImage(file, baseUrl, uploadUrl).then(url => {
+    minder.select(node, true)
+    minder.execCommand('image', url, '')
+    return url
+  })

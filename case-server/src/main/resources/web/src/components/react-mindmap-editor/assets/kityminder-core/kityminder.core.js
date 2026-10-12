@@ -5882,7 +5882,7 @@
               var link = new kity.HyperLink();
               var linkshape = new kity.Path();
               var outline = new kity.Rect(24, 22, -2, -6, 4).fill('rgba(255, 255, 255, 0)');
-              group.addShape(new kity.Rect(46, 22, -2, -6, 4).fill('rgba(255, 255, 255, 0)'));
+              group.addShape(new kity.Rect(46, 38, -2, -20, 4).fill('rgba(255, 255, 255, 0)'));
               linkshape.setPathData(linkShapePath).fill('#3370ff');
               link.addShape(outline);
               link.addShape(linkshape);
@@ -5890,9 +5890,9 @@
               link.setTarget('_blank');
               link.setStyle('cursor', 'pointer');
               var remove = new kity.Group();
-              remove.addShape(new kity.Circle(7).fill('#fff1f0').stroke('#ff7875'));
-              remove.addShape(new kity.Path().setPathData('M-2.5,-2.5L2.5,2.5M2.5,-2.5L-2.5,2.5').stroke('#f5222d', 1.5));
-              remove.setTranslate(37, 5);
+              remove.addShape(new kity.Circle(7).fill('#f5222d').stroke('#ffffff', 1));
+              remove.addShape(new kity.Path().setPathData('M-2.5,-2.5L2.5,2.5M2.5,-2.5L-2.5,2.5').stroke('#ffffff', 1.5));
+              remove.setTranslate(20, -4);
               remove.setStyle('cursor', 'pointer');
               remove.node.setAttribute('aria-label', '删除链接');
               remove.node.setAttribute('data-link-remove', 'true');

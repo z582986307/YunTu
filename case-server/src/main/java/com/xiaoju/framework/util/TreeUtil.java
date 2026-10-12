@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.mysql.cj.xdevapi.JsonArray;
+import com.xiaoju.framework.constants.XmindConstant;
 import com.xiaoju.framework.constants.enums.ProgressEnum;
 import com.xiaoju.framework.entity.request.cases.FileImportReq;
 import com.xiaoju.framework.entity.xmind.*;
@@ -364,7 +365,7 @@ public class TreeUtil {
     }
 
     // 导出json内容到xml
-    public static void exportDataToXml(JSONArray children, Element rootTopic, String path){
+    public static void exportDataToXml(JSONArray children, Element rootTopic, String path, int depth){
         if(children.size() == 0)
             return;
 
@@ -381,6 +382,7 @@ public class TreeUtil {
                     .addAttribute("id",dataObj.getString("id"))
                     .addAttribute("modified-by","didi")
                     .addAttribute("timestamp",dataObj.getString("created"))
+                    .addAttribute("style-id", depth == 1 ? XmindConstant.XMIND_STYLE_MAIN : XmindConstant.XMIND_STYLE_SUB)
                     .addAttribute("imageTitle", dataObj.getString("imageTitle"));
 
             JSONObject dataObj1 = dataObj.getJSONObject("imageSize");
@@ -453,7 +455,7 @@ public class TreeUtil {
             }
             JSONArray childChildren = ((JSONObject) o).getJSONArray("children");
             if (childChildren != null && childChildren.size() > 0) {
-                exportDataToXml(childChildren, topic, path);
+                exportDataToXml(childChildren, topic, path, depth + 1);
             }
         }
     }

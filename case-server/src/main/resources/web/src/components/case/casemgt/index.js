@@ -148,7 +148,7 @@ export default class CaseMgt extends React.Component {
             </Button>
           </div>
           <span className="case-detail-title">
-            用例名称：
+            {Number(iscore) === 3 ? '测试任务名称：' : '用例名称：'}
             {recordDetail ? recordDetail.title : ''}
             {casedetail ? casedetail.title : ''}
           </span>

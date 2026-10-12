@@ -28,11 +28,10 @@ import 'hotbox-ui/hotbox.css';
 import DoGroup from './toolbar/DoGroup';
 import ExecutionFloatingPanels from './components/executionFloatingPanels';
 import ImageModal from './components/imageModal';
+import { pasteImageIntoNode } from './components/imageUpload';
 import MindMapScrollbars from './components/mindMapScrollbars';
 import ThemeGroup from './outlook/ThemeGroup';
 import TemplateGroup from './outlook/TemplateGroup';
-import ResetLayoutGroup from './outlook/ResetLayoutGroup';
-import StyleGroup from './outlook/StyleGroup';
 import FontGroup from './outlook/FontGroup';
 import MindMapSearch from './components/mindMapSearch';
 import { expandToList, initData, buttons } from './constants';
@@ -246,8 +245,8 @@ class KityminderEditor extends Component {
   handlePasteImage = (file, node) => {
     if (this.state.isLock) return;
     if (!this.minder || !node) return;
-    this.minder.select(node, true);
-    this.setState({ showEditImage: true, pastedImageFile: file });
+    pasteImageIntoNode(file, node, this.minder, this.props.baseUrl, this.props.uploadUrl)
+      .catch(error => message.error(error.message || '图片粘贴失败，请重试'));
   };
   handleImageHover = event => {
     if (this.state.isLock) return;
@@ -1119,8 +1118,6 @@ class KityminderEditor extends Component {
                   <TemplateGroup {...childProps} />
                   {type !== 'compare' && (
                     <React.Fragment>
-                      <ResetLayoutGroup {...childProps} />
-                      <StyleGroup {...childProps} />
                       <FontGroup {...childProps} />
                     </React.Fragment>
                   )}

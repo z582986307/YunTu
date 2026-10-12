@@ -83,6 +83,55 @@ async function main() {
     await page.mouse.click(linkPoint.x, linkPoint.y);
     await popup;
     assert.strictEqual(page.url(), `${origin}/`, '原用例管理页面应保持不变');
+    const notePage = await browser.newPage();
+    await notePage.setViewport({ width: 1400, height: 900 });
+    await notePage.goto(`${origin}/`);
+    const withNote = await notePage.evaluate(target => {
+      const minder = new window.kityminder.Minder({ renderTo: '#map' });
+      window.noteMinder = minder;
+      minder.importJson({ template: 'right', root: { data: { text: '用例' }, children: [
+        { data: { text: '同时有链接和备注', hyperlink: target, note: '执行备注' }, children: [] },
+      ] } });
+      const shape = minder.getRoot().children[0].getRenderer('hyperlinkrender').getRenderShape().node;
+      shape.dispatchEvent(new MouseEvent('mouseenter'));
+      const link = shape.querySelector('a').getBoundingClientRect();
+      const remove = shape.querySelector('[data-link-remove="true"]').getBoundingClientRect();
+      return { link: { left: link.left, top: link.top, right: link.right }, remove: { left: remove.left, top: remove.top, right: remove.right } };
+    }, `${origin}/linked-target`);
+    assert(withNote.remove.left < withNote.link.right && withNote.remove.top < withNote.link.top,
+      `链接和备注并存时，红色删除按钮应位于链接右上角：${JSON.stringify(withNote)}`);
+    await notePage.evaluate(() => {
+      const minder = window.noteMinder;
+      minder.setOption('viewAnimationDuration', 0);
+      minder.execCommand('camera', minder.getRoot().children[0], 0);
+    });
+    await notePage.waitForTimeout(350);
+    const noteLinkPoint = await notePage.evaluate(() => {
+      const shape = window.noteMinder.getRoot().children[0].getRenderer('hyperlinkrender').getRenderShape().node;
+      const rect = shape.querySelector('a').getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    await notePage.mouse.move(noteLinkPoint.x, noteLinkPoint.y);
+    const noteDeletePoint = await notePage.evaluate(() => {
+      const shape = window.noteMinder.getRoot().children[0].getRenderer('hyperlinkrender').getRenderShape().node;
+      const remove = shape.querySelector('[data-link-remove="true"]');
+      const rect = remove.getBoundingClientRect();
+      return { visible: getComputedStyle(remove).display !== 'none', x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    assert(noteDeletePoint.visible, `链接和备注并存时悬浮链接应显示删除按钮：${JSON.stringify({ noteLinkPoint, noteDeletePoint })}`);
+    await notePage.mouse.move(noteDeletePoint.x, noteDeletePoint.y);
+    const noteDeleteHit = await notePage.evaluate(point => {
+      const hit = document.elementFromPoint(point.x, point.y);
+      return Boolean(hit && hit.closest('[data-link-remove="true"]'));
+    }, noteDeletePoint);
+    assert(noteDeleteHit, '链接与备注并存时删除按钮应保持可点击');
+    await notePage.mouse.click(noteDeletePoint.x, noteDeletePoint.y);
+    const afterNoteDelete = await notePage.evaluate(() => {
+      const node = window.noteMinder.getRoot().children[0];
+      return { link: node.getData('hyperlink'), note: node.getData('note') };
+    });
+    assert.strictEqual(afterNoteDelete.link, null, '点击红色删除按钮后应清除链接');
+    assert.strictEqual(afterNoteDelete.note, '执行备注', '删除链接不应清除备注');
     const editorPage = await browser.newPage();
     await editorPage.goto(`${origin}/editor`);
     await editorPage.evaluate(async target => {

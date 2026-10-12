@@ -52,6 +52,12 @@ public class XmindConstant {
      */
     public static final String XMIND_THEME_VERSION = "7473aupb6bv1i2bstr1sgj7bo9";
 
+    public static final String XMIND_STYLE_ROOT = "yuntu-root";
+
+    public static final String XMIND_STYLE_MAIN = "yuntu-main";
+
+    public static final String XMIND_STYLE_SUB = "yuntu-sub";
+
 
 
     public static final String XMIND_CREATED_VERSION = "1611739849951";

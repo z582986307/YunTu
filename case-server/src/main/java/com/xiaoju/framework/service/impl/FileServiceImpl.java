@@ -323,19 +323,51 @@ public class FileServiceImpl implements FileService {
         // 1、创建document对象
         Document document = DocumentHelper.createDocument();
         // 2、创建根节点root
-        document.addElement("meta").addAttribute("xmlns",XMIND_META_XMLNS).addAttribute("version","2.0");
+        document.addElement("meta", XMIND_META_XMLNS).addAttribute("version","2.0");
         path = path + "/meta.xml";
         writeXml(path,document);
+    }
+
+    private void writeStylesXml(String path) {
+        Document document = DocumentHelper.createDocument();
+        Element styles = document.addElement("xmap-styles", "urn:xmind:xmap:xmlns:style:2.0")
+                .addAttribute("version", "2.0")
+                .addNamespace("fo", "http://www.w3.org/1999/XSL/Format")
+                .addNamespace("svg", "http://www.w3.org/2000/svg");
+        Element automatic = styles.addElement("automatic-styles");
+        writeTopicStyle(automatic, XMIND_STYLE_ROOT, "#e7f1ff", "#1f3b64", "18pt");
+        writeTopicStyle(automatic, XMIND_STYLE_MAIN, "#f4f8ff", "#274568", "14pt");
+        writeTopicStyle(automatic, XMIND_STYLE_SUB, "#ffffff", "#334e70", "12pt");
+        writeXml(path + "/styles.xml", document);
+    }
+
+    private void writeTopicStyle(Element styles, String id, String fill, String color, String fontSize) {
+        styles.addElement("style")
+                .addAttribute("id", id)
+                .addAttribute("type", "topic")
+                .addElement("topic-properties")
+                .addAttribute("svg:fill", fill)
+                .addAttribute("border-line-color", "#000000")
+                .addAttribute("border-line-width", "1pt")
+                .addAttribute("line-class", "org.xmind.branchConnection.bight")
+                .addAttribute("line-color", "#000000")
+                .addAttribute("line-width", "1pt")
+                .addAttribute("shape-class", "org.xmind.topicShape.roundedRect")
+                .addAttribute("fo:color", color)
+                .addAttribute("fo:font-size", fontSize);
     }
 
     private void writeManifestXml(String path){
         // 1、创建document对象
         Document document = DocumentHelper.createDocument();
         // 2、创建根节点root
-        Element root = document.addElement("manifest").addAttribute("xmlns",XMIND_MAINFEST_XMLNS);
+        Element root = document.addElement("manifest", XMIND_MAINFEST_XMLNS);
         // 3、生成子节点及子节点内容，此处应该添加图片属性（2021/09/06）
         root.addElement("file-entry")
                 .addAttribute("full-path","content.xml")
+                .addAttribute("media-type","text/xml");
+        root.addElement("file-entry")
+                .addAttribute("full-path","styles.xml")
                 .addAttribute("media-type","text/xml");
 
         File attachmentDir = new File(path + "/attachments");
@@ -389,6 +421,7 @@ public class FileServiceImpl implements FileService {
         writeContentXml(testCase,path);
         //写Meta文件
         writeMetaXml(path);
+        writeStylesXml(path);
         //写MainFest文件,需要在此处添加文件夹中的问题信息
         writeManifestXml(path);
 
@@ -404,10 +437,10 @@ public class FileServiceImpl implements FileService {
         // 1、创建document对象
         Document document = DocumentHelper.createDocument();
         // 2、创建根节点root
-        Element root = document.addElement("xhtml:image")
-                .addAttribute("xmlns:xhtml", "http://www.w3.org/1999/xhtml")
+        Element root = document.addElement("xmap-content", "urn:xmind:xmap:xmlns:content:2.0")
+                .addAttribute("version", "2.0")
                 .addNamespace("fo", "http://www.w3.org/1999/XSL/Format")
-                .addNamespace("svg", "http://www.w3/org/2000/svg") // 在此处svg：添加命名空间
+                .addNamespace("svg", "http://www.w3.org/2000/svg")
                 .addNamespace("xhtml", "http://www.w3.org/1999/xhtml") // 在此为xhtml：添加命名空间
                 .addNamespace("xlink", "http://www.w3.org/1999/xlink"); // 在此为xlink：添加命名空间
 
@@ -415,13 +448,14 @@ public class FileServiceImpl implements FileService {
         Element sheet = root.addElement("sheet")
                 .addAttribute("id",ZEN_ROOT_VERSION) // 给sheet添加属性id
                 .addAttribute("modified-by",XMIND_MODIFIED_VERSION) // 给sheet添加属性modified-by
-                .addAttribute("theme",XMIND_THEME_VERSION) // 给sheet添加属性theme
                 .addAttribute("timestamp",XMIND_CREATED_VERSION); // 给sheet添加属性timestamp
         // 获得全部json数据，此时的json数据中有图片的链接地址，需要把image取出来
         JSONObject rootObj = JSON.parseObject(testCase.getCaseContent()).getJSONObject(ROOT);
         LOGGER.info("case中的内容：" + testCase.getCaseContent());
         Element topic = sheet.addElement("topic") // 给sheet添加新的节点topic
                 .addAttribute("id",rootObj.getJSONObject(DATA).getString("id")) // 获得id
+                .addAttribute("structure-class", "org.xmind.ui.logic.right")
+                .addAttribute("style-id", XMIND_STYLE_ROOT)
                 .addAttribute("modified-by","didi") // 获得用户名
                 .addAttribute("timestamp",rootObj.getJSONObject(DATA).getString("created")); // 获得创建时间戳
 
@@ -435,7 +469,7 @@ public class FileServiceImpl implements FileService {
         }
         title.setText(text); // 加入标题
         // 在xml里面的children添加数据，但是对于图片来说，它的key是image，而不是children
-        TreeUtil.exportDataToXml(rootObj.getJSONArray("children"), topic, path);
+        TreeUtil.exportDataToXml(rootObj.getJSONArray("children"), topic, path, 1);
         String targetPath = path  + "/content.xml";
         //写入xml
         writeXml(targetPath,document);

@@ -45,18 +45,21 @@ class FontGroup extends Component {
         <div>
           <Button
             icon="bold"
+            title="加粗"
             type="link"
             {...commonStyle}
             onClick={() => this.onChange('Bold', '')}
           />
           <Button
             icon="italic"
+            title="斜体"
             type="link"
             {...commonStyle}
             onClick={() => this.onChange('Italic', '')}
           />
           <Button
             icon="strikethrough"
+            title="删除线"
             type="link"
             {...commonStyle}
             onClick={() => this.onChange('del', '')}
@@ -67,6 +70,7 @@ class FontGroup extends Component {
             button={{
               ...commonStyle,
               type: 'link',
+              title: '字体颜色',
             }}
             icon="font-colors"
             action="ForeColor"
@@ -77,6 +81,7 @@ class FontGroup extends Component {
             button={{
               ...commonStyle,
               type: 'link',
+              title: '背景颜色',
             }}
             icon="bg-colors"
             action="Background"
