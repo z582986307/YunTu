@@ -3,6 +3,7 @@ import PropTypes from 'prop-types';
 import './index.scss';
 import 'kity';
 import './assets/kityminder-core/kityminder.core.js';
+import './assets/kityminder-core/kityminder.core.css';
 // import Websocket from 'react-websocket';
 import Socket from './socket.js';
 import {
@@ -120,7 +121,6 @@ class KityminderEditor extends Component {
   }
   componentWillUnmount() {
     clearTimeout(this.autoSaveTimer);
-    clearTimeout(this.imageClickTimer);
     window.removeEventListener('mousemove', this.handleImageResizeMove);
     window.removeEventListener('mouseup', this.handleImageResizeEnd);
     window.showEdit = false;
@@ -154,7 +154,7 @@ class KityminderEditor extends Component {
   };
   initOnEvent = minder => {
     const { readOnly } = this.props;
-    minder.setOption('externalImageViewerHandling', !readOnly);
+    minder.setOption('externalImageViewerHandling', true);
     minder.on('progressiveimportstart', () => this.setState({ loading: true }));
     minder.on('import', () => {
       if (!minder._progressiveImporting) this.centerImportedMap();
@@ -187,22 +187,17 @@ class KityminderEditor extends Component {
         selectedImage: state.selectedImage && state.selectedImage.node === node ? state.selectedImage : null,
       }));
     });
-    if (!readOnly) {
-      // 视图双击事件
-      minder.on('dblclick', e => {
-        const image = this.getImageEventTarget(e);
-        if (image) {
-          clearTimeout(this.imageClickTimer);
-          this.selectNodeImage(image.node);
-          return;
-        }
-        this.handleShowInput();
-      });
-    }
-    minder.on('mousedown', e => {
+    minder.on('dblclick', e => {
       const image = this.getImageEventTarget(e);
-      this.imagePressWasSelected = Boolean(image && this.imageSelectionArmedNode === image.node);
-      if (image) clearTimeout(this.imageClickTimer);
+      if (image) {
+        this.imageSelectionArmedNode = image.node;
+        if (!readOnly) this.selectNodeImage(image.node);
+        if (minder.viewer) minder.viewer.open(image.node.getData('image'));
+        return;
+      }
+      if (!readOnly) this.handleShowInput();
+    });
+    minder.on('mousedown', e => {
       if (e.originEvent.button === MOUSE_RB) {
         e.preventDefault();
         const { minder } = this;
@@ -224,20 +219,17 @@ class KityminderEditor extends Component {
     });
 
     minder.on('click', e => {
-      if (readOnly) return;
       const image = this.getImageEventTarget(e);
       if (!image) {
         this.imageSelectionArmedNode = e.getTargetNode && e.getTargetNode();
         if (this.state.selectedImage) this.setState({ selectedImage: null });
         return;
       }
-      if (!this.imagePressWasSelected) {
-        clearTimeout(this.imageClickTimer);
+      if (this.imageSelectionArmedNode !== image.node) {
         this.imageSelectionArmedNode = image.node;
-        this.imageClickTimer = setTimeout(() => {
-          if (this.minder && this.minder.viewer) this.minder.viewer.open(image.node.getData('image'));
-        }, 280);
-      } else {
+        minder.select(image.node, true);
+        if (this.state.selectedImage) this.setState({ selectedImage: null });
+      } else if (!readOnly) {
         this.selectNodeImage(image.node);
       }
     });

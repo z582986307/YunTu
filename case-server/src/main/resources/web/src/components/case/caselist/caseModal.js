@@ -224,7 +224,8 @@ class CaseModal extends React.Component {
   };
   renderTreeNodes = (data = []) =>
     data.map(item => {
-      item.title = <span>{item.text}</span>;
+      const title = item.text === '未分类用例集' ? '未分类用例' : item.text;
+      item.title = <span>{title}</span>;
       if (item.children) {
         return (
           <TreeNode
@@ -319,7 +320,7 @@ class CaseModal extends React.Component {
             <TreeSelect
               style={{ width: '100%' }}
               dropdownStyle={{ maxHeight: 400, overflow: 'auto' }}
-              placeholder="请选择用例"
+              placeholder="请选择用例目录"
               allowClear
               multiple
               treeDefaultExpandAll
