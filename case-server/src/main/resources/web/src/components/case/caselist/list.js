@@ -104,14 +104,14 @@ class Lists extends React.Component {
   setColumns = () => {
     const columns = [
       {
-        title: '用例集ID',
+        title: '用例ID',
         dataIndex: 'id',
         key: 'id',
         width: '8%',
         render: text => <div style={{ minWidth: '70px' }}>{text}</div>,
       },
       {
-        title: '用例集名称',
+        title: '用例名称',
         dataIndex: 'title',
         key: 'title',
         width: '25%',
@@ -169,7 +169,7 @@ class Lists extends React.Component {
 
           return (
             <span>
-              <Tooltip title="编辑用例集">
+              <Tooltip title="编辑用例">
                 <a
                   onClick={() => {
                     let infos =
@@ -204,7 +204,7 @@ class Lists extends React.Component {
                   <Icon type="file-done" />
                 </a>
               </Tooltip>
-              <Tooltip title="复制用例集">
+              <Tooltip title="复制用例">
                 <a
                   onClick={() => {
                     let infos =
@@ -231,14 +231,14 @@ class Lists extends React.Component {
                         className="delete-action"
                         onClick={() => {
                           Modal.confirm({
-                            title: '确认删除用例集吗',
+                            title: '确认删除用例吗',
                             content: (
                               <span>
                                 当前正在删除&nbsp;&nbsp;
                                 <span style={{ color: 'red' }}>
                                   {record.title}
                                 </span>
-                                &nbsp;&nbsp;用例集，并且删除用例集包含的{' '}
+                                &nbsp;&nbsp;用例，并且删除用例包含的{' '}
                                 <span style={{ color: 'red' }}>
                                   {record.recordNum}
                                 </span>{' '}
@@ -432,7 +432,7 @@ class Lists extends React.Component {
         ),
       },
       {
-        title: '已测用例集',
+        title: '已测用例',
         dataIndex: 'executeNum',
         key: 'executeNum',
         align: 'center',

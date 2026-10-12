@@ -152,7 +152,7 @@ class FileTree extends React.Component {
           <span>
             同时会删除包含的&nbsp;&nbsp;
             <span style={{ color: 'red' }}>{item.caseIds.length}</span>
-            &nbsp;&nbsp;个用例集
+            &nbsp;&nbsp;个用例
           </span>
         </span>
       ),
@@ -272,9 +272,10 @@ class FileTree extends React.Component {
   renderTreeNodes = data =>
     data.map(item => {
       let { searchValue } = this.state;
-      const searchIndex = item.text.indexOf(searchValue);
-      const beforeStr = item.text.substr(0, searchIndex);
-      const afterStr = item.text.substr(searchIndex + searchValue.length);
+      const displayText = item.text === '未分类用例集' ? '未分类用例' : item.text;
+      const searchIndex = displayText.indexOf(searchValue);
+      const beforeStr = displayText.substr(0, searchIndex);
+      const afterStr = displayText.substr(searchIndex + searchValue.length);
       if (item.isEdit) {
         item.title = (
           <div className="titleContainer" onClick={e => e.stopPropagation()}>
@@ -305,7 +306,7 @@ class FileTree extends React.Component {
       } else {
         item.title = (
           <div className="titleContainer">
-            <Tooltip className="tipClass" title={item.text}>
+            <Tooltip className="tipClass" title={displayText}>
               {searchIndex > -1 ? (
                 <div className="item-label">
                   {beforeStr}
@@ -325,7 +326,7 @@ class FileTree extends React.Component {
                 </div>
               ) : (
                 <div className="item-label">
-                  {item.text}
+                  {displayText}
                   <span
                     style={{
                       fontFamily: 'PingFangSC-Regular',
@@ -452,9 +453,9 @@ class FileTree extends React.Component {
     const dropNode = info.node.props;
     const dragNode = info.dragNode.props;
     if (dragNode.eventKey === '-1') {
-      message.error('未分类用例集不可移动！');
+      message.error('未分类用例不可移动！');
     } else if (dropNode.eventKey === '-1') {
-      message.error('未分类用例集下不可有其他文件！');
+      message.error('未分类用例下不可有其他文件！');
     } else {
       const fromId = dragNode.eventKey;
       let toId = '';

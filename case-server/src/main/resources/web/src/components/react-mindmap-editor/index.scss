@@ -172,6 +172,11 @@
 .mindmap-node-image-delete {
   position: absolute;
   z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
   width: 26px;
   height: 26px;
   border: 1px solid #fff;
@@ -180,6 +185,26 @@
   background: #f04438;
   box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
   cursor: pointer;
+}
+.mindmap-node-image-delete .anticon { display: flex; align-items: center; justify-content: center; line-height: 1; }
+.mindmap-selected-image {
+  position: absolute;
+  z-index: 11;
+  border: 1px solid #3370ff;
+  pointer-events: none;
+}
+.mindmap-image-resize-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 2px;
+  background: #3370ff;
+  cursor: nwse-resize;
+  pointer-events: auto;
 }
 .mindmap-node-image-delete:hover,
 .mindmap-node-image-delete:focus-visible {

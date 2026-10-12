@@ -142,7 +142,7 @@ public class DirServiceImpl implements DirService {
         DirNodeDto child = new DirNodeDto();
         child.setId("-1");
         child.setParentId(root.getId());
-        child.setText("未分类用例集");
+        child.setText("未分类用例");
         child.setCaseIds(ids);
         root.getChildren().add(child);
 

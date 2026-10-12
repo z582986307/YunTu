@@ -6066,6 +6066,7 @@
           },
           events: {
             'normal.click readonly.click': function (e) {
+              if (this.getOption('externalImageViewerHandling')) return;
               var shape = e.kityEvent.targetShape;
               if (shape.__KityClassName === 'Image' && shape.url) {
                 this.viewer.open(shape.url);

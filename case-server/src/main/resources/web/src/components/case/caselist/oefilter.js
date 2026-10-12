@@ -148,7 +148,7 @@ class OeFilter extends React.Component {
           <Col span={24} className="m-b-24">
             <div className="filter-item">
               <Input
-                placeholder="用例集名称"
+                placeholder="用例名称"
                 style={{ width: '100%' }}
                 onChange={this.nameFiltersInput}
                 value={this.state.nameFilter}

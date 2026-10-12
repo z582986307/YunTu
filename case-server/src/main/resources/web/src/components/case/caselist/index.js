@@ -274,7 +274,7 @@ class CaseLists extends React.Component {
                     });
                   }}
                 >
-                  <Icon type="plus" /> 新建用例集
+                  <Icon type="plus" /> 新建用例
                 </Button>
               </Col>
             </Row>

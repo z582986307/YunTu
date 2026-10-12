@@ -97,6 +97,8 @@ class KityminderEditor extends Component {
       wsConnected: false,
       contextMenu: null,
       hoverImage: null,
+      selectedImage: null,
+      imageResizePreview: null,
       showEditImage: false,
     };
     this.base = -1;
@@ -118,6 +120,9 @@ class KityminderEditor extends Component {
   }
   componentWillUnmount() {
     clearTimeout(this.autoSaveTimer);
+    clearTimeout(this.imageClickTimer);
+    window.removeEventListener('mousemove', this.handleImageResizeMove);
+    window.removeEventListener('mouseup', this.handleImageResizeEnd);
     window.showEdit = false;
     cancelMindMapImport(this.minder);
     if (this.minder && this.minder._paintGroups) this.minder._paintGroups.dispose();
@@ -148,6 +153,8 @@ class KityminderEditor extends Component {
     document.addEventListener('keydown', this.handleKeyDown);
   };
   initOnEvent = minder => {
+    const { readOnly } = this.props;
+    minder.setOption('externalImageViewerHandling', !readOnly);
     minder.on('progressiveimportstart', () => this.setState({ loading: true }));
     minder.on('import', () => {
       if (!minder._progressiveImporting) this.centerImportedMap();
@@ -155,7 +162,6 @@ class KityminderEditor extends Component {
     minder.on('progressiveimportdone', this.centerImportedMap);
     minder.on('progressiveimporterror', () => this.setState({ loading: false }));
     minder.on('layouterror', () => notification.error({ message: '脑图布局更新失败，请重新进入当前页面' }));
-    const { readOnly } = this.props;
     // 视图选中节点变更事件
     minder.on('selectionchange', () => {
       const node = minder.getSelectedNode();
@@ -175,19 +181,28 @@ class KityminderEditor extends Component {
         }
       }
       this.hotbox.active(HotBox.STATE_IDLE);
-      this.setState({
+      this.setState(state => ({
         selectedNode: node,
         noteContent: null,
-      });
+        selectedImage: state.selectedImage && state.selectedImage.node === node ? state.selectedImage : null,
+      }));
     });
     if (!readOnly) {
       // 视图双击事件
       minder.on('dblclick', e => {
-        // 双击节点，呼出编辑框
+        const image = this.getImageEventTarget(e);
+        if (image) {
+          clearTimeout(this.imageClickTimer);
+          this.selectNodeImage(image.node);
+          return;
+        }
         this.handleShowInput();
       });
     }
     minder.on('mousedown', e => {
+      const image = this.getImageEventTarget(e);
+      this.imagePressWasSelected = Boolean(image && this.imageSelectionArmedNode === image.node);
+      if (image) clearTimeout(this.imageClickTimer);
       if (e.originEvent.button === MOUSE_RB) {
         e.preventDefault();
         const { minder } = this;
@@ -208,6 +223,25 @@ class KityminderEditor extends Component {
       });
     });
 
+    minder.on('click', e => {
+      if (readOnly) return;
+      const image = this.getImageEventTarget(e);
+      if (!image) {
+        this.imageSelectionArmedNode = e.getTargetNode && e.getTargetNode();
+        if (this.state.selectedImage) this.setState({ selectedImage: null });
+        return;
+      }
+      if (!this.imagePressWasSelected) {
+        clearTimeout(this.imageClickTimer);
+        this.imageSelectionArmedNode = image.node;
+        this.imageClickTimer = setTimeout(() => {
+          if (this.minder && this.minder.viewer) this.minder.viewer.open(image.node.getData('image'));
+        }, 280);
+      } else {
+        this.selectNodeImage(image.node);
+      }
+    });
+
     // 视图改变事件的监听，用于持续渲染编辑框的位置
     minder.on('viewchange', e => {
       const { showEdit, noteContent } = this.state;
@@ -219,6 +253,7 @@ class KityminderEditor extends Component {
       if (noteContent !== null) {
         this.handleNotePreview();
       }
+      if (this.state.selectedImage) this.forceUpdate();
     });
 
     // 备注是否展示的事件监听
@@ -247,6 +282,80 @@ class KityminderEditor extends Component {
     if (!this.minder || !node) return;
     pasteImageIntoNode(file, node, this.minder, this.props.baseUrl, this.props.uploadUrl)
       .catch(error => message.error(error.message || '图片粘贴失败，请重试'));
+  };
+  getImageEventTarget = event => {
+    const node = event.getTargetNode && event.getTargetNode();
+    const shape = event.kityEvent && event.kityEvent.targetShape;
+    const target = event.originEvent && event.originEvent.target;
+    const isImage = (shape && shape.__KityClassName === 'Image') ||
+      (target && target.tagName && target.tagName.toLowerCase() === 'image');
+    if (!node || !node.getData('image')) return null;
+    if (!isImage) {
+      const mouse = event.originEvent;
+      const images = node.getRenderContainer().node.querySelectorAll('image');
+      let hit = false;
+      for (let i = 0; i < images.length; i += 1) {
+        const bounds = images[i].getBoundingClientRect();
+        if (mouse.clientX >= bounds.left && mouse.clientX <= bounds.right &&
+            mouse.clientY >= bounds.top && mouse.clientY <= bounds.bottom) hit = true;
+      }
+      if (!hit) return null;
+    }
+    return { node };
+  };
+  getSelectedImageRect = () => {
+    const selected = this.state.selectedImage;
+    if (!selected || !this.editorContainer) return null;
+    const renderer = selected.node.getRenderer('ImageRenderer');
+    const shape = renderer && renderer.getRenderShape();
+    const image = shape && shape.node;
+    if (!image) return null;
+    const rect = image.getBoundingClientRect();
+    const container = this.editorContainer.getBoundingClientRect();
+    return { left: rect.left - container.left, top: rect.top - container.top,
+      width: rect.width, height: rect.height };
+  };
+  selectNodeImage = node => {
+    if (this.props.readOnly || this.state.isLock) return;
+    this.minder.select(node, true);
+    this.setState({ selectedImage: { node } });
+  };
+  handleImageResizeStart = event => {
+    event.preventDefault();
+    event.stopPropagation();
+    const selected = this.state.selectedImage;
+    if (!selected || this.props.readOnly || this.state.isLock) return;
+    const rect = this.getSelectedImageRect();
+    const size = selected.node.getData('imageSize');
+    if (!rect || !size) return;
+    this.imageResizeStart = { x: event.clientX, size, rect, node: selected.node };
+    window.addEventListener('mousemove', this.handleImageResizeMove);
+    window.addEventListener('mouseup', this.handleImageResizeEnd);
+  };
+  handleImageResizeMove = event => {
+    const start = this.imageResizeStart;
+    if (!start) return;
+    const scale = start.rect.width / start.size.width;
+    const width = Math.max(30, Math.min(800, start.size.width + (event.clientX - start.x) / scale));
+    this.setState({ imageResizePreview: { width: width * scale,
+      height: width * start.size.height / start.size.width * scale } });
+  };
+  handleImageResizeEnd = event => {
+    window.removeEventListener('mousemove', this.handleImageResizeMove);
+    window.removeEventListener('mouseup', this.handleImageResizeEnd);
+    const start = this.imageResizeStart;
+    this.imageResizeStart = null;
+    this.setState({ imageResizePreview: null });
+    if (!start || this.props.readOnly) return;
+    const scale = start.rect.width / start.size.width;
+    const width = Math.round(Math.max(30, Math.min(800, start.size.width + (event.clientX - start.x) / scale)));
+    if (width === start.size.width) return;
+    start.node.setData('imageSize', { width,
+      height: Math.round(width * start.size.height / start.size.width) });
+    start.node.render();
+    this.minder.fire('saveScene');
+    this.minder.layout(100);
+    this.minder.fire('contentchange');
   };
   handleImageHover = event => {
     if (this.state.isLock) return;
@@ -459,7 +568,13 @@ class KityminderEditor extends Component {
             setTimeout(this.handleShowInput, 300);
           }
         }
-        if (e.keyCode === 8) {
+        if (e.keyCode === 8 && this.state.selectedImage && !this.state.isLock) {
+          e.preventDefault();
+          const node = this.state.selectedImage.node;
+          this.minder.select(node, true);
+          this.minder.execCommand('image', null);
+          this.setState({ selectedImage: null, hoverImage: null });
+        } else if (e.keyCode === 8) {
           e.preventDefault();
           this.minder.execCommand('RemoveNode');
         }
@@ -1167,6 +1282,20 @@ class KityminderEditor extends Component {
               <Icon type="close" />
             </button>
           )}
+          {!readOnly && this.state.selectedImage && (() => {
+            const rect = this.getSelectedImageRect();
+            if (!rect) return null;
+            const preview = this.state.imageResizePreview;
+            return <div className="mindmap-selected-image" style={{
+              left: rect.left, top: rect.top,
+              width: preview ? preview.width : rect.width,
+              height: preview ? preview.height : rect.height,
+            }}>
+              <button type="button" className="mindmap-image-resize-handle"
+                aria-label="调整图片尺寸" title="拖动调整图片尺寸"
+                onMouseDown={this.handleImageResizeStart} />
+            </div>;
+          })()}
           {this.state.contextMenu && (
             <div
               ref={node => (this.contextMenuRef = node)}

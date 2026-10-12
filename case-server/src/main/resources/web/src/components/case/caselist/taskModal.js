@@ -275,7 +275,7 @@ class TaskModal extends React.Component {
             />,
           )}
         </Form.Item>
-        <Form.Item {...formItemLayout} label="选择用例集">
+        <Form.Item {...formItemLayout} label="选择用例">
           {getFieldDecorator('chooseContent', {
             initialValue: radioValue,
           })(
@@ -288,11 +288,11 @@ class TaskModal extends React.Component {
                   覆盖全部可用用例（共计{' '}
                   {(this.props.record && this.props.caseInfo.totalCount) ||
                     '0'}{' '}
-                  个），如果用例集库有新增的用例，会自动加入到本计划中
+                  个），如果用例库有新增的用例，会自动加入到本计划中
                 </p>
               </Radio>
               <Radio style={radioStyle} value={'1'}>
-                手动圈选用例集
+                手动圈选用例
                 <br />
                 <Row className="menu-case">
                   <Col span={4} style={{ textAlign: 'right' }}>
@@ -341,7 +341,7 @@ class TaskModal extends React.Component {
                   (this.props.caseInfo.count ||
                     this.props.caseInfo.count === 0) && (
                     <span style={{ marginLeft: 22 }}>
-                      {this.props.caseInfo.count}条用例集已选
+                      {this.props.caseInfo.count}条用例已选
                     </span>
                   )}
               </Radio>
