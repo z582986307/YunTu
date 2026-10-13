@@ -502,7 +502,10 @@
   border: 1px solid #e5e6eb;
   border-radius: 12px;
   box-shadow: 0 4px 14px rgba(31, 35, 41, 0.04);
-  .case-management-title { padding: 0 12px 12px; color: #1f2329; font-weight: 600; white-space: nowrap; }
+  .case-management-title { display: flex; align-items: center; justify-content: space-between; color: #1f2329; font-weight: 600; white-space: nowrap; }
+  .case-management-chevron { width: 7px; height: 7px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s ease; }
+  .case-management-chevron.expanded { transform: rotate(45deg); }
+  .case-management-submenu { padding-left: 8px; }
   button {
     display: block;
     width: 100%;
@@ -529,7 +532,45 @@
   .task-list-actions { display: flex; white-space: nowrap; }
   .task-list-actions .ant-btn { padding: 0 5px; border: 0; background: transparent; }
   .task-list-delete { color: #f53f3f; }
+  .task-list-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    .ant-input-search { width: 240px; }
+    .ant-select { min-width: 150px; }
+  }
   .ant-pagination { margin-top: 16px; text-align: right; }
+}
+
+.byte-case-list .table-wrap .ant-table-thead > tr > th:first-child,
+.byte-case-list .table-wrap .ant-table-tbody > tr > td:first-child,
+.byte-case-list .task-list-page .ant-table-thead > tr > th:first-child,
+.byte-case-list .task-list-page .ant-table-tbody > tr > td:first-child {
+  padding-left: 16px !important;
+}
+
+.case-list-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  white-space: nowrap;
+  .ant-btn { padding: 0 5px; border: 0; background: transparent; }
+}
+
+.uploaded-case-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 8px 10px;
+  color: #3370ff;
+  background: #f5f8ff;
+  border: 1px solid #c9d8f5;
+  border-radius: 8px;
+  span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  button { flex: 0 0 auto; margin-left: auto; border: 0; background: transparent; cursor: pointer; }
 }
 
 @media (max-width: 900px) {

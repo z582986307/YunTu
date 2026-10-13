@@ -41,6 +41,7 @@ class CaseLists extends React.Component {
       productLineId: '',
       treeData: [],
       viewMode: 'cases',
+      navExpanded: true,
       levelId: '',
       levelText: '',
       searchValue: '',
@@ -239,13 +240,19 @@ class CaseLists extends React.Component {
     return (
       <div className="all-content byte-case-list">
         <nav className="case-management-nav" aria-label="测试用例管理">
-          <div className="case-management-title">测试用例管理</div>
+          <button type="button" className="case-management-title"
+            aria-expanded={this.state.navExpanded}
+            onClick={() => this.setState(state => ({ navExpanded: !state.navExpanded }))}>
+            测试用例管理<span className={`case-management-chevron${this.state.navExpanded ? ' expanded' : ''}`} />
+          </button>
+          {this.state.navExpanded && <div className="case-management-submenu">
           <button type="button" className={this.state.viewMode === 'cases' ? 'active' : ''}
             aria-current={this.state.viewMode === 'cases' ? 'page' : undefined}
             onClick={() => this.setState({ viewMode: 'cases' })}>测试用例</button>
           <button type="button" className={this.state.viewMode === 'tasks' ? 'active' : ''}
             aria-current={this.state.viewMode === 'tasks' ? 'page' : undefined}
             onClick={() => this.setState({ viewMode: 'tasks' })}>测试任务</button>
+          </div>}
         </nav>
         {this.state.viewMode === 'cases' && <FileTree
           productLineId={Number(productLineId)}

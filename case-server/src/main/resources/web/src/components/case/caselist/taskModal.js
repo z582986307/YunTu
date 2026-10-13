@@ -217,15 +217,15 @@ class TaskModal extends React.Component {
               this.props.titleModeTask === '编辑测试任务' &&
               this.props.record.owner
                 ? this.props.record.owner
-                : '',
+                : undefined,
           })(
             <Select
               showSearch
               allowClear
-              placeholder="请选择已注册用户"
+              placeholder="搜索负责人"
               filterOption={false}
               onSearch={this.props.getOwnerList}
-              notFoundContent={fetching ? '搜索中...' : '输入用户名搜索已注册用户'}
+              notFoundContent={fetching ? '搜索中...' : '搜索负责人'}
             >
               {(ownerList || []).map(item => (
                 <Option key={item} value={item}>

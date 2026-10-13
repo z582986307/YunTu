@@ -97,6 +97,39 @@ async function main() {
     await page.mouse.up({ button: 'middle' });
     const afterPan = await textPosition();
     assert(Math.abs(afterPan.x - beforePan.x) > 20, '中键拖动移动脑图');
+    const editorFound = await page.evaluate(() => {
+      const wrapper = document.querySelector('.edit-input');
+      const fiberKey = Object.keys(wrapper).find(key => key.startsWith('__reactInternalInstance'));
+      let fiber = wrapper[fiberKey];
+      while (fiber && !(fiber.stateNode && fiber.stateNode.handleShowInput)) fiber = fiber.return;
+      if (!fiber) return false;
+      window.__browserTestEditor = fiber.stateNode;
+      const editor = fiber.stateNode;
+      editor.minder.setStatus('normal');
+      editor.minder.select([editor.minder.getRoot()], true);
+      editor.handleShowInput();
+      return true;
+    });
+    assert(editorFound, '浏览器找到实际脑图编辑组件');
+    await page.waitForSelector('.edit-input:not(.hide) textarea');
+    const editMetrics = await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      const group = editor.minder.getRoot().getRenderer('TextRenderer').getRenderShape().node;
+      const text = group.querySelector('text');
+      const textarea = document.querySelector('.edit-input textarea');
+      const textRect = group.getBoundingClientRect();
+      const inputRect = textarea.getBoundingClientRect();
+      return {
+        expectedFont: parseFloat(getComputedStyle(text).fontSize) * textRect.width / group.getBBox().width,
+        actualFont: parseFloat(getComputedStyle(textarea).fontSize),
+        deltaLeft: Math.abs(textRect.left - inputRect.left),
+        deltaTop: Math.abs(textRect.top - inputRect.top),
+      };
+    });
+    assert(Math.abs(editMetrics.expectedFont - editMetrics.actualFont) < 1,
+      `编辑文字不缩小：${JSON.stringify(editMetrics)}`);
+    assert(editMetrics.deltaLeft < 4 && editMetrics.deltaTop < 4,
+      `编辑框覆盖原文字位置：${JSON.stringify(editMetrics)}`);
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     console.log('browser-history-versions: pass');
   } finally {

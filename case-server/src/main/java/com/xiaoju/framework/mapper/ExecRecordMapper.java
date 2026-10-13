@@ -41,7 +41,11 @@ public interface ExecRecordMapper {
      */
     List<ExecRecord> getRecordListByCaseId(Long caseId);
 
-    List<ExecRecord> getRecordPageByProductLineId(@Param("productLineId") Long productLineId);
+    List<ExecRecord> getRecordPageByProductLineId(@Param("productLineId") Long productLineId,
+                                                  @Param("keyword") String keyword,
+                                                  @Param("owner") String owner,
+                                                  @Param("beginTime") String beginTime,
+                                                  @Param("endTime") String endTime);
 
 
     /**

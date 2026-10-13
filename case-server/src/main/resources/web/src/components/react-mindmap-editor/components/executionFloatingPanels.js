@@ -145,10 +145,11 @@ class ExecutionFloatingPanels extends Component {
           <strong>{this.props.planCycle || '未设置'}</strong>
         </div>
         <div className="execution-progress-summary">
-          <span>已执行用例</span>
-          <strong>
-            {progress.completed} / {progress.total}
-          </strong>
+          <span>执行进度</span>
+          <span className="execution-progress-values">
+            <strong>{progress.completed} / {progress.total}</strong>
+            <strong>{progress.percent}%</strong>
+          </span>
         </div>
         <div
           className="execution-progress-bar"

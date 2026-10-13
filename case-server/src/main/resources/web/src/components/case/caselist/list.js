@@ -13,6 +13,7 @@ import {
   Menu,
   Dropdown,
   Tooltip,
+  Button,
 } from 'antd';
 import './index.scss';
 import moment from 'moment';
@@ -107,14 +108,14 @@ class Lists extends React.Component {
         title: '用例ID',
         dataIndex: 'id',
         key: 'id',
-        width: '8%',
+        width: 90,
         render: text => <div style={{ minWidth: '70px' }}>{text}</div>,
       },
       {
         title: '用例名称',
         dataIndex: 'title',
         key: 'title',
-        width: '25%',
+        width: 220,
         render: (text, record) => {
           let url = `${this.props.baseUrl}/caseManager/${this.props.productId}/${record.id}/undefined/0`;
           return <Link to={url}>{text}</Link>;
@@ -124,25 +125,25 @@ class Lists extends React.Component {
         title: '关联需求',
         dataIndex: 'requirementId',
         key: 'requirementId',
-        width: '20%',
+        width: 200,
         render: text => <div style={{ minWidth: '200px' }}>{text}</div>,
       },
       {
         title: '最近更新人',
         dataIndex: 'modifier',
-        width: '10%',
+        width: 120,
         key: 'modifier',
       },
       {
         title: '创建人',
         dataIndex: 'creator',
-        width: '7%',
+        width: 100,
         key: 'creator',
       },
       {
         title: '创建时间',
         dataIndex: 'gmtCreated',
-        width: '15%',
+        width: 180,
         key: 'gmtCreated',
         render: text => {
           return (
@@ -156,7 +157,7 @@ class Lists extends React.Component {
       {
         title: '操作',
         dataIndex: 'handle',
-        width: '15%',
+        width: 220,
         key: 'handle',
         render: (text, record) => {
           const { projectLs, requirementLs } = this.props.options;
@@ -168,9 +169,9 @@ class Lists extends React.Component {
             : record.creator;
 
           return (
-            <span>
+            <span className="case-list-actions">
               <Tooltip title="编辑用例">
-                <a
+                <Button type="link"
                   onClick={() => {
                     let infos =
                       getRequirmentAllInfos(
@@ -188,24 +189,22 @@ class Lists extends React.Component {
                       this.state.current,
                     );
                   }}
-                  className="icon-bg border-a-redius-left"
                 >
-                  <Icon type="edit" />
-                </a>
+                  编辑
+                </Button>
               </Tooltip>
 
               <Tooltip title="创建测试任务">
-                <a
-                  className="icon-bg"
+                <Button type="link"
                   onClick={() => {
                     this.showTask('新建测试任务', record);
                   }}
                 >
-                  <Icon type="file-done" />
-                </a>
+                  创建任务
+                </Button>
               </Tooltip>
               <Tooltip title="复制用例">
-                <a
+                <Button type="link"
                   onClick={() => {
                     let infos =
                       getRequirmentAllInfos(
@@ -217,10 +216,9 @@ class Lists extends React.Component {
                     let requirement = infos.requirement || [];
                     this.props.handleTask('copy', record, project, requirement);
                   }}
-                  className="icon-bg border-a-redius-right margin-3-right"
                 >
-                  <Icon type="copy" />
-                </a>
+                  复制
+                </Button>
               </Tooltip>
 
               <Dropdown
@@ -281,9 +279,7 @@ class Lists extends React.Component {
                   </Menu>
                 }
               >
-                <a className="icon-bg border-around">
-                  <Icon type="ellipsis" />
-                </a>
+                <Button type="link">更多</Button>
               </Dropdown>
             </span>
           );
@@ -685,6 +681,7 @@ class Lists extends React.Component {
           size="middle"
           loading={loading}
           pagination={false}
+          scroll={{ x: 1130 }}
           footer={currentData => (
             <div style={{ height: '32px' }}>
               {

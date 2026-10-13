@@ -62,12 +62,15 @@ public class RecordServiceImpl implements RecordService {
     private TestCaseMapper caseMapper;
 
     @Override
-    public PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize) {
+    public PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize,
+                                                              String keyword, String owner, String beginTime, String endTime) {
         if (productLineId == null || pageNum < 1 || pageSize < 1 || pageSize > 100) {
             throw new CaseServerException("任务列表分页参数无效", StatusCode.DATA_FORMAT_ERROR);
         }
         PageHelper.startPage(pageNum, pageSize);
-        List<ExecRecord> rows = recordMapper.getRecordPageByProductLineId(productLineId);
+        List<ExecRecord> rows = recordMapper.getRecordPageByProductLineId(productLineId,
+                keyword == null ? "" : keyword.trim(), owner == null ? "" : owner.trim(),
+                beginTime == null ? "" : beginTime.trim(), endTime == null ? "" : endTime.trim());
         List<RecordListResp> result = new ArrayList<>();
         for (ExecRecord row : rows) {
             RecordListResp item = new RecordListResp();

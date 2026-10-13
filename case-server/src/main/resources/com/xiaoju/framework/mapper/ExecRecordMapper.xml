@@ -228,6 +228,20 @@
     from exec_record r inner join test_case c on c.id = r.case_id
     where c.product_line_id = #{productLineId,jdbcType=BIGINT}
       and c.is_delete = 0 and r.is_delete = 0
+    <if test="keyword != null and keyword != ''">
+      and (r.title like concat('%', #{keyword}, '%')
+        or cast(r.id as char) like concat('%', #{keyword}, '%')
+        or cast(r.case_id as char) like concat('%', #{keyword}, '%'))
+    </if>
+    <if test="owner != null and owner != ''">
+      and find_in_set(#{owner}, replace(r.owner, ', ', ',')) &gt; 0
+    </if>
+    <if test="beginTime != null and beginTime != ''">
+      and r.gmt_created &gt;= #{beginTime}
+    </if>
+    <if test="endTime != null and endTime != ''">
+      and r.gmt_created &lt;= #{endTime}
+    </if>
     order by r.gmt_created desc, r.id desc
   </select>
 

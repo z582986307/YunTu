@@ -663,8 +663,6 @@ class KityminderEditor extends Component {
         input.style.backgroundColor = node.getData('background') ||
           node.getStyle(node.isSelected() ? 'selected-background' : 'background') || '#fff';
         input.style.color = node.getStyle('color');
-        input.style.fontSize = `${node.getStyle('font-size')}px`;
-        input.style.lineHeight = String(node.getStyle('line-height'));
         input.focus();
         input.setSelectionRange(input.value.length, input.value.length);
       });

@@ -31,6 +31,10 @@ const node = (data, children = []) => ({
 test('执行结果提供稳定的语义样式标识', () => {
   expect(RESULT_OPTIONS.map(item => item.tone)).toEqual(['success', 'danger', 'warning', 'skipped'])
 })
+test('通过失败阻塞跳过都计入执行进度，未测试不计入', () => {
+  expect(getExecutionProgress({ passed: 1, failed: 2, blocked: 3, skipped: 4, pending: 10, total: 20 })).toEqual({ completed: 10, total: 20, percent: 50 })
+  expect(getExecutionProgress({ passed: 0, failed: 0, blocked: 0, skipped: 0, pending: 0, total: 0 }).percent).toBe(0)
+})
 test('标记结果按钮按两列等宽换行避免窄悬浮窗重叠', () => {
   expect(getExecutionMarkGridStyle()).toEqual({
     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',

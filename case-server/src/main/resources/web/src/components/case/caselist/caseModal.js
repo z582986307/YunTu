@@ -259,6 +259,7 @@ class CaseModal extends React.Component {
         return false;
       },
       fileList: caseFile ? [caseFile] : [],
+      showUploadList: false,
     };
     let title = '';
     switch (operate) {
@@ -340,38 +341,31 @@ class CaseModal extends React.Component {
           <Row style={{ marginBottom: '20px' }}>
             <Col span={6}>导入用例文件:</Col>
             <Col span={16} className="dragger">
-              <div className="div-flex-child-1">
-                <Dragger {...props}>
-                  {caseFile === null ? (
+              {caseFile ? (
+                <div className="uploaded-case-file" title={caseFile.name}>
+                  <Icon type="file" />
+                  <span>{caseFile.name}</span>
+                  <button type="button" aria-label="移除已上传用例" title="移除已上传用例"
+                    onClick={() => this.setState({ caseFile: null })}><Icon type="close" /></button>
+                </div>
+              ) : <React.Fragment>
+                <div className="div-flex-child-1">
+                  <Dragger {...props}>
                     <Icon
                       type="plus-circle"
                       style={{ color: '#447CE6', fontSize: '24px' }}
                     />
-                  ) : (
-                    <Icon
-                      type="file"
-                      style={{
-                        color: '#447CE6',
-                        fontSize: '24px',
-                        position: 'relative',
-                        top: '-15px',
-                      }}
-                    />
-                  )}
-                </Dragger>
-              </div>
-              <div className="div-flex-child-2">
-                <div>
-                  <span className="span-text span-text-bold">
-                    上传文件（非必传）
-                  </span>
-                  <span className="span-text span-text-light">
-                    支持.xmind和excel文件，excel请按照<a href={caseTemplate} download="testcase-template.xlsx">
-                      模板
-                    </a>填写...
-                  </span>
+                  </Dragger>
                 </div>
-              </div>
+                <div className="div-flex-child-2">
+                  <div>
+                    <span className="span-text span-text-bold">上传文件（非必传）</span>
+                    <span className="span-text span-text-light">
+                      支持.xmind和excel文件，excel请按照<a href={caseTemplate} download="testcase-template.xlsx">模板</a>填写...
+                    </span>
+                  </div>
+                </div>
+              </React.Fragment>}
             </Col>
           </Row>
         )}

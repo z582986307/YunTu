@@ -18,7 +18,8 @@ import java.util.List;
  * @date 2020/8/18
  */
 public interface RecordService {
-    PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize);
+    PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize,
+                                                      String keyword, String owner, String beginTime, String endTime);
 
     /**
      * 根据用例集caseId，查询该用例集下所有的执行任务

@@ -107,11 +107,11 @@ const MindMapSearch = ({ minder }) => {
             {results.length ? activeIndex + 1 : 0}/{results.length}
           </span>
           <Button.Group size="small">
-            <Button aria-label="上一个搜索结果" onClick={() => move(-1)} disabled={!results.length}>
-              <Icon type="up" />
-            </Button>
             <Button aria-label="下一个搜索结果" onClick={() => move(1)} disabled={!results.length}>
               <Icon type="down" />
+            </Button>
+            <Button aria-label="上一个搜索结果" onClick={() => move(-1)} disabled={!results.length}>
+              <Icon type="up" />
             </Button>
           </Button.Group>
         </React.Fragment>

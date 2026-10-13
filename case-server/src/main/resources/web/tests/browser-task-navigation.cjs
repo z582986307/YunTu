@@ -11,6 +11,7 @@ const evidence = path.join(root, '运行日志/任务列表浏览器验证')
 fs.mkdirSync(evidence, { recursive: true })
 
 async function main() {
+  const taskPageQueries = []
   const server = http.createServer((request, response) => {
     let body = null
     if (request.url.startsWith('/api/dir/list') || request.url.startsWith('/api/dir/cardTree')) body = { children: [] }
@@ -20,11 +21,12 @@ async function main() {
         requirementId: '', gmtCreated: '2026-10-13T09:00:00' },
     ], total: 1 }
     if (request.url.startsWith('/api/case/countByCondition')) body = { count: 5 }
+    if (request.url.startsWith('/api/case/getCaseInfo')) body = { id: 7, title: '客户管理', description: '' }
     if (request.url.startsWith('/api/user/suggest')) body = ['tester', 'test-user']
-    if (request.url.startsWith('/api/record/page')) body = { dataSources: [
+    if (request.url.startsWith('/api/record/page')) { taskPageQueries.push(request.url); body = { dataSources: [
       { id: 9, caseId: 7, title: '较新的任务', owner: 'tester', createTime: 2000, executeNum: 2, totalNum: 3 },
       { id: 8, caseId: 7, title: '较旧的任务', owner: 'tester', createTime: 1000, executeNum: 1, totalNum: 3 },
-    ], total: 2 }
+    ], total: 2 } }
     if (body !== null) {
       response.setHeader('Content-Type', 'application/json')
       response.end(json(body))
@@ -55,6 +57,9 @@ async function main() {
     assert(await page.evaluate(() => document.querySelector('.case-management-nav').textContent.includes('测试用例管理')))
     assert.strictEqual(await page.$$('.table-wrap .ant-table-row-expand-icon').then(items => items.length), 0,
       '用例表不再内嵌任务行')
+    assert(await page.$eval('.table-wrap .case-list-actions', node =>
+      ['编辑', '创建任务', '复制', '更多'].every(label => node.textContent.includes(label))))
+    await page.screenshot({ path: path.join(evidence, '用例列表.png') })
     await page.evaluate(() => Array.from(document.querySelectorAll('button'))
       .find(button => button.textContent.includes('新建用例')).click())
     await page.waitForSelector('.oe-caseModal-style-wrap input[id="case"]')
@@ -62,13 +67,18 @@ async function main() {
     await upload.uploadFile(path.join(__dirname, '../src/components/case/caselist/testcase-template.xlsx'))
     await page.waitForFunction(() => document.querySelector('.oe-caseModal-style-wrap input[id="case"]')
       .value === 'testcase-template')
+    assert.strictEqual(await page.$eval('.uploaded-case-file span', node => node.textContent), 'testcase-template.xlsx')
+    assert(!(await page.$eval('.oe-caseModal-style-wrap', node => node.textContent)).includes('上传文件（非必传）'))
     await page.keyboard.press('Escape')
     await page.waitForSelector('.oe-caseModal-style-wrap', { hidden: true })
-    await page.click('.table-wrap .ant-table-tbody tr:first-child a .anticon-file-done')
+    await page.evaluate(() => Array.from(document.querySelectorAll('.table-wrap .ant-table-tbody tr:first-child button'))
+      .find(button => button.textContent.trim() === '创建任务').click())
     await page.waitForSelector('.oe-taskModal-style-wrap input[id="title"]')
     assert.strictEqual(await page.$eval('.oe-taskModal-style-wrap input[id="title"]', node => node.value), '客户管理')
-    await page.click('.oe-taskModal-style-wrap div#owner .ant-select-selection')
-    await page.type('.oe-taskModal-style-wrap div#owner .ant-select-search__field', 'test')
+    await page.focus('.oe-taskModal-style-wrap div#owner .ant-select-selection')
+    await page.keyboard.press('Enter')
+    await page.focus('.oe-taskModal-style-wrap div#owner .ant-select-search__field')
+    await page.keyboard.type('test', { delay: 60 })
     await page.waitForFunction(() => Array.from(document.querySelectorAll('.ant-select-dropdown-menu-item'))
       .some(item => item.textContent.trim() === 'test-user'), { timeout: 5000 })
     await page.click('.oe-taskModal-style-wrap .ant-modal-close')
@@ -80,8 +90,18 @@ async function main() {
     assert.strictEqual(await page.$$eval('.task-list-page .ant-table-tbody tr', rows => rows.length), 2)
     assert.strictEqual(await page.$eval('.task-list-page .ant-table-tbody tr:first-child .task-list-name',
       node => node.textContent.trim()), '较新的任务')
+    assert.strictEqual(await page.$eval('.task-list-page .ant-table-tbody tr:first-child td:first-child',
+      node => node.textContent.trim()), '9')
+    await page.type('.task-list-filters input[placeholder^="搜索任务名称"]', '较新')
+    await page.click('.task-list-filters .ant-btn-primary')
+    await page.waitForFunction(() => document.querySelector('.task-list-page') &&
+      document.querySelector('.task-list-page .ant-table-tbody tr'))
+    await page.waitForFunction(() => document.querySelector('.task-list-page .ant-table-tbody tr'))
+    assert(taskPageQueries.some(query => decodeURIComponent(query).includes('keyword=较新')))
     const shot = path.join(evidence, '任务列表.png')
     await page.screenshot({ path: shot })
+    await page.click('.task-list-page .ant-table-tbody tr:first-child td:nth-child(3) a')
+    await page.waitForFunction(() => location.pathname === '/caseManager/1/7/undefined/0')
     console.log('browser-task-navigation: pass')
   } finally {
     if (browser) await browser.close()

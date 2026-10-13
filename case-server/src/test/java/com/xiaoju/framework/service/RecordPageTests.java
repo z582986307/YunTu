@@ -28,11 +28,11 @@ public class RecordPageTests {
         Page<ExecRecord> page = new Page<>();
         page.add(row);
         page.setTotal(1);
-        when(mapper.getRecordPageByProductLineId(1L)).thenReturn(page);
-        PageModule<RecordListResp> result = service.getPageByProductLineId(1L, 1, 10);
+        when(mapper.getRecordPageByProductLineId(1L, "任务", "tester", "2026-10-01 00:00:00", "2026-10-31 23:59:59")).thenReturn(page);
+        PageModule<RecordListResp> result = service.getPageByProductLineId(1L, 1, 10, "任务", "tester", "2026-10-01 00:00:00", "2026-10-31 23:59:59");
         assertEquals(Long.valueOf(1), result.getTotal());
         assertEquals(Long.valueOf(9), result.getDataSources().get(0).getId());
         assertEquals(Long.valueOf(1000), result.getDataSources().get(0).getCreateTime());
-        verify(mapper).getRecordPageByProductLineId(1L);
+        verify(mapper).getRecordPageByProductLineId(1L, "任务", "tester", "2026-10-01 00:00:00", "2026-10-31 23:59:59");
     }
 }

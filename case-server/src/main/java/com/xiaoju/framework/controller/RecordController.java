@@ -34,8 +34,13 @@ public class RecordController {
     @GetMapping(value = "/page")
     public Response<?> getRecordPage(@RequestParam Long productLineId,
                                      @RequestParam(defaultValue = "1") Integer pageNum,
-                                     @RequestParam(defaultValue = "10") Integer pageSize) {
-        return Response.success(recordService.getPageByProductLineId(productLineId, pageNum, pageSize));
+                                     @RequestParam(defaultValue = "10") Integer pageSize,
+                                     @RequestParam(required = false) String keyword,
+                                     @RequestParam(required = false) String owner,
+                                     @RequestParam(required = false) String beginTime,
+                                     @RequestParam(required = false) String endTime) {
+        return Response.success(recordService.getPageByProductLineId(productLineId, pageNum, pageSize,
+                keyword, owner, beginTime, endTime));
     }
 
     /**
