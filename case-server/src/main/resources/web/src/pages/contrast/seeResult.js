@@ -25,13 +25,18 @@ class SeeResult extends React.Component {
         caseId2: this.props.match.params.caseId2,
       },
     }).then(res => {
-      this.setState({ loading: false });
-      if (res.code === 200) {
-        this.editorNode.setEditerData(res.data.content.root);
+      if (res.code === 200 && res.data && res.data.content && res.data.content.root) {
+        this.editorNode.setEditerData(res.data.content).then(() => {
+          this.setState({ loading: false });
+        });
         this.setState({ info: res.data.backupinfo });
       } else {
-        message.error(res.msg);
+        this.setState({ loading: false });
+        message.error(res.msg || '版本对比失败');
       }
+    }).catch(() => {
+      this.setState({ loading: false });
+      message.error('版本对比失败，请重试');
     });
   }
   render() {

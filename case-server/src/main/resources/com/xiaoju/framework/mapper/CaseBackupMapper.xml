@@ -35,7 +35,20 @@
     select
     <include refid="Base_Column_List" />
     from case_backup
-    where id = #{id,jdbcType=BIGINT}
+    where id = #{id,jdbcType=BIGINT} and is_delete = 0
+  </select>
+
+  <select id="selectHistoryByCaseId" resultMap="BaseResultMap">
+    select id, case_id, title, creator, gmt_created, extra, is_delete
+    from case_backup
+    where case_id = #{caseId,jdbcType=BIGINT} and is_delete = 0
+    <if test="beginTime != null">
+      and gmt_created &gt;= #{beginTime,jdbcType=TIMESTAMP}
+    </if>
+    <if test="endTime != null">
+      and gmt_created &lt;= #{endTime,jdbcType=TIMESTAMP}
+    </if>
+    order by id desc
   </select>
 
   <delete id="updateByCaseId" parameterType="java.lang.Long">

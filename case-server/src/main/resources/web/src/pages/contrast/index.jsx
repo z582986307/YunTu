@@ -1,10 +1,11 @@
 /** 历史版本对比 */
 import React from 'react'
-import { Table, Button, Card, Tooltip } from 'antd'
+import { Table, Button, Card, Tooltip, Modal, message } from 'antd'
 import moment from 'moment'
 import './index.scss'
 import Headers from '../../layouts/headers'
 import request from '@/utils/axios'
+import getQueryString from '@/utils/getCookies'
 moment.locale('zh-cn')
 
 class Contrast extends React.Component {
@@ -14,26 +15,59 @@ class Contrast extends React.Component {
       rowKeys: [], // 当前选择行的 key
       rows: [], // 当前选择的行数据
       historyList: [],
+      loading: false,
     }
   }
   componentDidMount() {
     this.getHistoryList()
   }
   getHistoryList = () => {
-    request(`/backup/getBackupByCaseId`, {
+    this.setState({ loading: true })
+    return request(`/backup/getBackupByCaseId`, {
       method: 'GET',
       params: {
         caseId: this.props.match.params.caseId,
       },
     }).then(res => {
       if (res.code === 200) {
-        this.setState({ historyList: res.data })
+        this.setState({ historyList: res.data || [], loading: false })
+      } else {
+        this.setState({ loading: false })
+        message.error(res.msg || '历史版本加载失败')
       }
+    }).catch(() => {
+      this.setState({ loading: false })
+      message.error('历史版本加载失败，请重试')
     })
   }
   contrastClick = () => {
     const { rows } = this.state
+    if (rows.length !== 2) return
     this.props.history.push(`/caseManager/historyContrast/${rows[0].id}/${rows[1].id}`)
+  }
+  restoreClick = record => {
+    Modal.confirm({
+      title: '恢复历史版本？',
+      content: '恢复前会保存当前用例为新历史版本，已有测试任务和执行记录不变。',
+      okText: '确认恢复',
+      cancelText: '取消',
+      onOk: () => request('/backup/restore', {
+        method: 'POST',
+        body: {
+          caseId: Number(this.props.match.params.caseId),
+          backupId: record.id,
+          modifier: getQueryString.getCookie('username'),
+        },
+      }).then(res => {
+        if (res.code !== 200) {
+          message.error(res.msg || '恢复失败')
+          return Promise.reject(new Error(res.msg || '恢复失败'))
+        }
+        message.success('已恢复历史版本')
+        this.setState({ rowKeys: [], rows: [] })
+        return this.getHistoryList()
+      }),
+    })
   }
   setTableColums = () => {
     const columns = [
@@ -52,11 +86,17 @@ class Contrast extends React.Component {
         title: '创建人',
         dataIndex: 'creator',
       },
+      {
+        title: '操作',
+        key: 'operation',
+        render: (_, record) => <Button type="link" onClick={() => this.restoreClick(record)}>恢复</Button>,
+      },
     ]
     return columns
   }
   render() {
     const rowSelection = {
+      selectedRowKeys: this.state.rowKeys,
       onChange: (selectedRowKeys, selectedRows) => {
         this.setState({ rowKeys: selectedRowKeys, rows: selectedRows })
       },
@@ -68,6 +108,11 @@ class Contrast extends React.Component {
     return (
       <section style={{ marginBottom: 30 }}>
         <Headers />
+        <div className="history-navigation">
+          <Button type="link" icon="arrow-left" onClick={() => this.props.history.goBack()}>
+            返回
+          </Button>
+        </div>
         <Card
           bordered={false}
           className={this.state.rowKeys.length >= 2 ? 'contras_card' : 'contras_card_default'}
@@ -92,6 +137,7 @@ class Contrast extends React.Component {
             rowSelection={rowSelection}
             columns={this.setTableColums()}
             dataSource={this.state.historyList}
+            loading={this.state.loading}
           />
         </Card>
       </section>

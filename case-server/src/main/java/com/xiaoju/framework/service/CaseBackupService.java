@@ -43,4 +43,6 @@ public interface CaseBackupService {
     JsonNode getCaseDiff(Long backupId1, Long backupId2);
 
     int insertEditInfo(CaseBackup caseBackup);
+
+    void restoreBackup(Long caseId, Long backupId, String modifier);
 }

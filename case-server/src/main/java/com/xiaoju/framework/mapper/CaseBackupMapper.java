@@ -30,6 +30,10 @@ public interface CaseBackupMapper {
                                     @Param("beginTime") Date beginTime,
                                     @Param("endTime")  Date endTime);
 
+    List<CaseBackup> selectHistoryByCaseId(@Param("caseId") Long caseId,
+                                           @Param("beginTime") Date beginTime,
+                                           @Param("endTime") Date endTime);
+
     CaseBackup selectByBackupId(@Param("id") Long id);
 
     /**

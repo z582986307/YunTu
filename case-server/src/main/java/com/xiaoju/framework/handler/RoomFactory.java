@@ -26,4 +26,9 @@ public class RoomFactory {
     public static void clearRoom(String roomId) {
         roomEntityMap.remove(roomId);
     }
+
+    public static boolean isCaseBeingEdited(Long caseId) {
+        return roomEntityMap.values().stream()
+                .anyMatch(room -> caseId.equals(room.getCaseId()) && room.getClientNum() > 0);
+    }
 }

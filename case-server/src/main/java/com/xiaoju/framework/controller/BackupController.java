@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.xiaoju.framework.constants.enums.StatusCode;
 import com.xiaoju.framework.entity.exception.CaseServerException;
 import com.xiaoju.framework.entity.persistent.CaseBackup;
+import com.xiaoju.framework.entity.request.cases.RestoreBackupReq;
 import com.xiaoju.framework.entity.response.controller.Response;
 import com.xiaoju.framework.service.CaseBackupService;
 import org.slf4j.Logger;
@@ -86,5 +87,12 @@ public class BackupController {
             return Response.build(StatusCode.SERVER_BUSY_ERROR);
         }
 
+    }
+
+    @PostMapping(value = "/restore")
+    public Response<?> restoreBackup(@RequestBody RestoreBackupReq request) {
+        request.validate();
+        caseBackupService.restoreBackup(request.getCaseId(), request.getBackupId(), request.getModifier());
+        return Response.success();
     }
 }

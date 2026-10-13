@@ -7,8 +7,13 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.flipkart.zjsonpatch.JsonDiff;
 import com.flipkart.zjsonpatch.JsonPatch;
+import com.xiaoju.framework.constants.enums.StatusCode;
+import com.xiaoju.framework.entity.exception.CaseServerException;
 import com.xiaoju.framework.entity.persistent.CaseBackup;
+import com.xiaoju.framework.entity.persistent.TestCase;
 import com.xiaoju.framework.mapper.CaseBackupMapper;
+import com.xiaoju.framework.mapper.TestCaseMapper;
+import com.xiaoju.framework.handler.RoomFactory;
 import com.xiaoju.framework.service.CaseBackupService;
 import com.xiaoju.framework.util.TimeUtil;
 import org.slf4j.Logger;
@@ -20,8 +25,6 @@ import org.springframework.util.StringUtils;
 import javax.annotation.Resource;
 import java.io.IOException;
 import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static com.flipkart.zjsonpatch.DiffFlags.ADD_ORIGINAL_VALUE_ON_REPLACE;
 
@@ -37,6 +40,9 @@ public class CaseBackupServiceImpl implements CaseBackupService {
 
     @Resource
     private CaseBackupMapper caseBackupMapper;
+
+    @Resource
+    private TestCaseMapper caseMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -176,26 +182,57 @@ public class CaseBackupServiceImpl implements CaseBackupService {
     }
     @Override
     public List<CaseBackup> getBackupByCaseId(Long caseId, String beginTime, String endTime) {
-        List<CaseBackup> backupsSrc = caseBackupMapper.selectByCaseId(caseId, transferTime(beginTime), transferTime(endTime));
-        List<CaseBackup> backups = new ArrayList<>();
-        String pattern = "\"base\":(\\d+).*";
-        Pattern r = Pattern.compile(pattern);
-        Integer compareVersion = 0;
-        for (CaseBackup cb:backupsSrc) {
-            Matcher m = r.matcher(cb.getCaseContent());
-            if (m.find()) {
-                Integer currentVersion = Integer.valueOf(m.group(1));
-                if (!currentVersion.equals(compareVersion)) {
-                    backups.add(cb);
-                    compareVersion = currentVersion;
-                } else {
-                    LOGGER.error("base信息一致。过滤信息。base： " + currentVersion);
-                }
-            } else {
-                LOGGER.error("未找到base信息。用例内容是：" + cb.getCaseContent());
-            }
+        return caseBackupMapper.selectHistoryByCaseId(caseId, transferTime(beginTime), transferTime(endTime));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void restoreBackup(Long caseId, Long backupId, String modifier) {
+        if (caseId == null || backupId == null || modifier == null || modifier.trim().isEmpty()) {
+            throw new CaseServerException("恢复参数不完整", StatusCode.INTERNAL_ERROR);
         }
-        return backups;
+        if (RoomFactory.isCaseBeingEdited(caseId)) {
+            throw new CaseServerException("用例正在编辑，请关闭编辑页面后再恢复", StatusCode.INTERNAL_ERROR);
+        }
+        TestCase testCase = caseMapper.selectOne(caseId);
+        CaseBackup selected = caseBackupMapper.selectByBackupId(backupId);
+        if (testCase == null || selected == null || !caseId.equals(selected.getCaseId())) {
+            throw new CaseServerException("历史版本不存在或不属于该用例", StatusCode.NOT_FOUND_ENTITY);
+        }
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode current = mapper.readTree(testCase.getCaseContent());
+            JsonNode version = mapper.readTree(selected.getCaseContent());
+            if (!(current instanceof ObjectNode) || !(version instanceof ObjectNode) ||
+                    !version.has("root") || !version.path("root").isObject()) {
+                throw new CaseServerException("历史版本内容无效", StatusCode.DATA_FORMAT_ERROR);
+            }
+            CaseBackup before = new CaseBackup();
+            before.setCaseId(caseId);
+            before.setCaseContent(testCase.getCaseContent());
+            before.setRecordContent("");
+            before.setCreator(modifier);
+            before.setExtra("");
+            if (caseBackupMapper.insert(before) != 1) throw new IllegalStateException("当前版本备份失败");
+
+            ((ObjectNode) version).put("base", Math.max(current.path("base").asLong(),
+                    version.path("base").asLong()) + 1);
+            String restoredContent = mapper.writeValueAsString(version);
+            testCase.setCaseContent(restoredContent);
+            testCase.setModifier(modifier);
+            testCase.setGmtModified(new Date());
+            if (caseMapper.update(testCase) != 1) throw new IllegalStateException("恢复用例失败");
+
+            CaseBackup restored = new CaseBackup();
+            restored.setCaseId(caseId);
+            restored.setCaseContent(restoredContent);
+            restored.setRecordContent("");
+            restored.setCreator(modifier);
+            restored.setExtra("");
+            if (caseBackupMapper.insert(restored) != 1) throw new IllegalStateException("恢复结果备份失败");
+        } catch (IOException error) {
+            throw new CaseServerException("历史版本内容无法读取", error, StatusCode.DATA_FORMAT_ERROR);
+        }
     }
 
     @Override

@@ -11,6 +11,13 @@
     }
   }
 }
+.history-navigation {
+  padding: 12px 24px 0;
+  .ant-btn-link {
+    color: #3370ff;
+    padding-left: 0;
+  }
+}
 .contras_card_default {
   .ant-table-thead .ant-table-selection-column .ant-table-header-column {
     display: none;
