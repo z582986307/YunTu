@@ -8192,12 +8192,13 @@
                 'inputready.mousedown inputready.touchstart ' +
                 'readonly.mousedown readonly.touchstart',
               function (e) {
-                if (e.originEvent.button == 2) {
+                if (e.originEvent.button == 1 || e.originEvent.button == 2) {
                   e.originEvent.preventDefault();
                 }
                 // 点击未选中的根节点临时开启
                 if (
                   e.getTargetNode() == this.getRoot() ||
+                  e.originEvent.button == 1 ||
                   e.originEvent.button == 2 ||
                   e.originEvent.altKey
                 ) {

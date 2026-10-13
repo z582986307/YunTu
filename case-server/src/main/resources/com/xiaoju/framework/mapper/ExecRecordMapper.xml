@@ -220,6 +220,17 @@
     order by id desc
   </select>
 
+  <select id="getRecordPageByProductLineId" resultMap="BaseResultMap">
+    select r.id, r.case_id, r.title, r.env, r.is_delete, r.pass_count, r.total_count,
+      r.success_count, r.fail_count, r.block_count, r.ignore_count, r.creator, r.modifier,
+      r.description, r.choose_content, r.executors, r.gmt_created, r.gmt_modified,
+      r.expect_start_time, r.expect_end_time, r.owner
+    from exec_record r inner join test_case c on c.id = r.case_id
+    where c.product_line_id = #{productLineId,jdbcType=BIGINT}
+      and c.is_delete = 0 and r.is_delete = 0
+    order by r.gmt_created desc, r.id desc
+  </select>
+
   <select id="getRecordNumByCaseIds" parameterType="java.lang.Long" resultType="com.xiaoju.framework.entity.dto.RecordNumDto">
     select case_id as caseId, count(*) as recordNum from exec_record
     where case_id in

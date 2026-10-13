@@ -7,6 +7,8 @@ import com.xiaoju.framework.entity.response.controller.Response;
 import com.xiaoju.framework.service.UserService;
 import com.xiaoju.framework.util.CookieUtils;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -23,6 +25,11 @@ import javax.servlet.http.HttpServletResponse;
 public class UserController {
     @Resource
     UserService userService;
+
+    @GetMapping("/suggest")
+    public Response<?> suggestUsers(@RequestParam(value = "username", required = false) String keyword) {
+        return Response.success(userService.suggestUsers(keyword));
+    }
     /**
      * 用户注册
      * @param req

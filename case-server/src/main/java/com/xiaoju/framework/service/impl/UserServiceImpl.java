@@ -49,6 +49,12 @@ public class UserServiceImpl implements UserService {
     private AuthorityMapper authorityMapper;
 
     @Override
+    public List<String> suggestUsers(String keyword) {
+        String normalized = keyword == null ? "" : keyword.trim();
+        return normalized.isEmpty() ? Collections.emptyList() : userMapper.findUsernames(normalized, 20);
+    }
+
+    @Override
     public void changePassword(String username, UserPasswordChangeReq req) {
         if (StringUtils.isEmpty(username) || req == null ||
                 StringUtils.isEmpty(req.getOldPassword()) || StringUtils.isEmpty(req.getNewPassword())) {

@@ -2,6 +2,8 @@ package com.xiaoju.framework.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
+import com.github.pagehelper.Page;
+import com.github.pagehelper.PageHelper;
 import com.xiaoju.framework.constants.enums.EnvEnum;
 import com.xiaoju.framework.constants.enums.StatusCode;
 import com.xiaoju.framework.entity.dto.MergeCaseDto;
@@ -15,6 +17,7 @@ import com.xiaoju.framework.entity.request.record.RecordUpdateReq;
 import com.xiaoju.framework.entity.request.ws.RecordWsClearReq;
 import com.xiaoju.framework.entity.response.records.RecordGeneralInfoResp;
 import com.xiaoju.framework.entity.response.records.RecordListResp;
+import com.xiaoju.framework.entity.response.controller.PageModule;
 import com.xiaoju.framework.entity.xmind.IntCount;
 import com.xiaoju.framework.mapper.ExecRecordMapper;
 import com.xiaoju.framework.mapper.TestCaseMapper;
@@ -57,6 +60,37 @@ public class RecordServiceImpl implements RecordService {
 
     @Resource
     private TestCaseMapper caseMapper;
+
+    @Override
+    public PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize) {
+        if (productLineId == null || pageNum < 1 || pageSize < 1 || pageSize > 100) {
+            throw new CaseServerException("任务列表分页参数无效", StatusCode.DATA_FORMAT_ERROR);
+        }
+        PageHelper.startPage(pageNum, pageSize);
+        List<ExecRecord> rows = recordMapper.getRecordPageByProductLineId(productLineId);
+        List<RecordListResp> result = new ArrayList<>();
+        for (ExecRecord row : rows) {
+            RecordListResp item = new RecordListResp();
+            item.setId(row.getId());
+            item.setRecordId(row.getId());
+            item.setCaseId(row.getCaseId());
+            item.setTitle(row.getTitle());
+            item.setOwner(row.getOwner());
+            item.setCreator(row.getCreator());
+            item.setBugNum(row.getFailCount());
+            item.setBlockNum(row.getBlockCount());
+            item.setSuccessNum(row.getSuccessCount());
+            item.setExecuteNum(row.getPassCount());
+            item.setTotalNum(row.getTotalCount());
+            item.setChooseContent(row.getChooseContent());
+            item.setCreateTime(row.getGmtCreated() == null ? null : row.getGmtCreated().getTime());
+            item.setExpectStartTime(row.getExpectStartTime());
+            item.setExpectEndTime(row.getExpectEndTime());
+            item.setDescription(row.getDescription());
+            result.add(item);
+        }
+        return PageModule.buildPage(result, ((Page<ExecRecord>) rows).getTotal());
+    }
 
     @Override
     public List<RecordListResp> getListByCaseId(Long caseId) {

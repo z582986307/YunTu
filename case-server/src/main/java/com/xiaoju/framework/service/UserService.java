@@ -12,6 +12,7 @@ import java.util.List;
  * Created by didi on 2021/4/22.
  */
 public interface UserService {
+    List<String> suggestUsers(String keyword);
     Integer register(UserRegisterReq req, HttpServletRequest request, HttpServletResponse response);
     Integer login(UserLoginReq req, HttpServletRequest request, HttpServletResponse response);
     Integer logout(HttpServletRequest request, HttpServletResponse response);

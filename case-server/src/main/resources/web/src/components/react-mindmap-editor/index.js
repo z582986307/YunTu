@@ -659,14 +659,12 @@ class KityminderEditor extends Component {
       this.setState({ showEdit: true, inputContent }, () => {
         window.showEdit = true;
         editInput(node, inputNode);
-        const textBox = node.getRenderBox('TextRenderer') || node.getRenderBox();
-        inputNode.style.width = `${Math.max(24, Math.ceil(textBox.width) + 12)}px`;
-        inputNode.style.height = `${Math.max(24, Math.ceil(textBox.height) + 8)}px`;
         const input = inputNode.querySelector('textarea');
         input.style.backgroundColor = node.getData('background') ||
           node.getStyle(node.isSelected() ? 'selected-background' : 'background') || '#fff';
         input.style.color = node.getStyle('color');
         input.style.fontSize = `${node.getStyle('font-size')}px`;
+        input.style.lineHeight = String(node.getStyle('line-height'));
         input.focus();
         input.setSelectionRange(input.value.length, input.value.length);
       });

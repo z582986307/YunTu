@@ -7,6 +7,7 @@ import com.xiaoju.framework.entity.request.record.RecordUpdateReq;
 import com.xiaoju.framework.entity.request.ws.RecordWsClearReq;
 import com.xiaoju.framework.entity.response.records.RecordGeneralInfoResp;
 import com.xiaoju.framework.entity.response.records.RecordListResp;
+import com.xiaoju.framework.entity.response.controller.PageModule;
 
 import java.util.List;
 
@@ -17,6 +18,7 @@ import java.util.List;
  * @date 2020/8/18
  */
 public interface RecordService {
+    PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize);
 
     /**
      * 根据用例集caseId，查询该用例集下所有的执行任务

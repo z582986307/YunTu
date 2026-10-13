@@ -10,6 +10,7 @@ import List from './list.js';
 import Filter from './filter.js';
 import OeFilter from './oefilter';
 import FileTree from './tree';
+import TaskList from './taskList';
 class CaseLists extends React.Component {
   static propTypes = {
     form: PropTypes.any,
@@ -39,6 +40,7 @@ class CaseLists extends React.Component {
       current: 1,
       productLineId: '',
       treeData: [],
+      viewMode: 'cases',
       levelId: '',
       levelText: '',
       searchValue: '',
@@ -236,7 +238,16 @@ class CaseLists extends React.Component {
     const { productLineId } = match.params;
     return (
       <div className="all-content byte-case-list">
-        <FileTree
+        <nav className="case-management-nav" aria-label="测试用例管理">
+          <div className="case-management-title">测试用例管理</div>
+          <button type="button" className={this.state.viewMode === 'cases' ? 'active' : ''}
+            aria-current={this.state.viewMode === 'cases' ? 'page' : undefined}
+            onClick={() => this.setState({ viewMode: 'cases' })}>测试用例</button>
+          <button type="button" className={this.state.viewMode === 'tasks' ? 'active' : ''}
+            aria-current={this.state.viewMode === 'tasks' ? 'page' : undefined}
+            onClick={() => this.setState({ viewMode: 'tasks' })}>测试任务</button>
+        </nav>
+        {this.state.viewMode === 'cases' && <FileTree
           productLineId={Number(productLineId)}
           doneApiPrefix={doneApiPrefix}
           getCaseList={caseIds => {
@@ -246,8 +257,9 @@ class CaseLists extends React.Component {
           }}
           getTreeList={this.getTreeList}
           treeData={treeData}
-        />
+        />}
         <div className="min-hig-content">
+          {this.state.viewMode === 'tasks' ? <TaskList productLineId={productLineId} /> : (
           <div className="site-drawer-render-in-current-wrapper">
             <Row className="m-b-10">
               <Col span={18}>
@@ -322,8 +334,9 @@ class CaseLists extends React.Component {
             )) ||
               null}
           </div>
+          )}
 
-          {this.state.visible && (
+          {this.state.viewMode === 'cases' && this.state.visible && (
             <CaseModal
               productId={productLineId}
               data={this.state.currCase}

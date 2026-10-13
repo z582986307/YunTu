@@ -580,7 +580,7 @@ class Lists extends React.Component {
         return;
       }
       //  if (res.code === 200) {
-      this.setState({ ownerList: res ? res : [], fetching: false });
+      this.setState({ ownerList: res && res.code === 200 ? res.data || [] : [], fetching: false });
       //  }
     });
   };
@@ -680,63 +680,11 @@ class Lists extends React.Component {
         <Table
           columns={this.setColumns()}
           dataSource={list}
-          expandedRowRender={item => this.renderExpand(item)}
           className="table-wrap"
-          onExpand={this.onExpand}
-          expandedRowKeys={expendKeys}
           rowKey="id"
           size="middle"
           loading={loading}
           pagination={false}
-          expandIcon={props => {
-            if (props.record.recordNum > 0) {
-              if (!props.expanded) {
-                return (
-                  <div
-                    className="case-list-expand-hit-area"
-                    role="button"
-                    tabIndex="0"
-                    aria-label="展开行"
-                    onClick={event => {
-                      event.stopPropagation();
-                      let extendLoading = this.state.extendLoading.set(
-                        props.record.id,
-                        true,
-                      );
-
-                      this.setState({ extendLoading });
-                      this.seeDetail(props);
-                    }}
-                  >
-                    <span
-                      className="ant-table-row-expand-icon ant-table-row-collapsed"
-                      aria-hidden="true"
-                    />
-                  </div>
-                );
-              } else {
-                return (
-                  <div
-                    className="case-list-expand-hit-area"
-                    role="button"
-                    tabIndex="0"
-                    aria-label="关闭行"
-                    onClick={event => {
-                      event.stopPropagation();
-                      this.seeDetail(props);
-                    }}
-                  >
-                    <span
-                      className="ant-table-row-expand-icon ant-table-row-expanded"
-                      aria-hidden="true"
-                    />
-                  </div>
-                );
-              }
-            } else {
-              return null;
-            }
-          }}
           footer={currentData => (
             <div style={{ height: '32px' }}>
               {
@@ -759,7 +707,7 @@ class Lists extends React.Component {
           )}
         />
         <TaskModal
-          key="id"
+          key={`${this.state.titleModeTask}-${this.state.record && this.state.record.id}`}
           visible={this.state.taskVisible}
           caseInfo={this.state.caseInfo}
           onClose={this.onCloseTask}

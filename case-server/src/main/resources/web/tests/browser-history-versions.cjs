@@ -82,6 +82,21 @@ async function main() {
       .find(button => button.textContent.includes('对比已选择版本')).click());
     await page.waitForFunction(() => location.pathname.includes('/historyContrast/'));
     await page.waitForFunction(() => document.body.textContent.includes('版本比较结果'));
+    assert(await page.evaluate(() => Array.from(document.querySelectorAll('svg text'))
+      .some(node => node.textContent.includes('版本比较结果') && node.childElementCount === 0)));
+    const textPosition = () => page.evaluate(() => {
+      const node = Array.from(document.querySelectorAll('svg text'))
+        .find(item => item.textContent.includes('版本比较结果'));
+      const rect = node.getBoundingClientRect();
+      return { x: rect.x, y: rect.y };
+    });
+    const beforePan = await textPosition();
+    await page.mouse.move(250, 350);
+    await page.mouse.down({ button: 'middle' });
+    await page.mouse.move(330, 380, { steps: 8 });
+    await page.mouse.up({ button: 'middle' });
+    const afterPan = await textPosition();
+    assert(Math.abs(afterPan.x - beforePan.x) > 20, '中键拖动移动脑图');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     console.log('browser-history-versions: pass');
   } finally {

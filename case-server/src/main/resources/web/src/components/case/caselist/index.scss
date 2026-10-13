@@ -28,16 +28,14 @@
     margin-left: -18px !important;
     padding-left: 15px !important;
     width: 125px !important;
-    word-break: break-all !important;
+    word-break: normal !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
-    display: -webkit-box !important;
-    -webkit-line-clamp: 2 !important;
-    -webkit-box-orient: vertical !important;
+    display: block !important;
     padding-right: 5px !important;
     font-size: 12px !important;
     line-height: 15px !important;
-    white-space: normal !important;
+    white-space: nowrap !important;
   }
   .ant-upload-list-item-card-actions {
     position: absolute !important;
@@ -384,6 +382,8 @@
 }
 
 .byte-case-list {
+  width: 100%;
+  box-sizing: border-box;
   gap: 12px;
   padding: 16px;
   background: #f5f6f7;
@@ -492,6 +492,50 @@
   .pagination .ant-pagination-next {
     border-radius: 7px;
   }
+}
+
+.case-management-nav {
+  flex: 0 0 144px;
+  align-self: stretch;
+  padding: 16px 8px;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(31, 35, 41, 0.04);
+  .case-management-title { padding: 0 12px 12px; color: #1f2329; font-weight: 600; white-space: nowrap; }
+  button {
+    display: block;
+    width: 100%;
+    min-height: 36px;
+    margin: 2px 0;
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #4e5969;
+    text-align: left;
+    cursor: pointer;
+  }
+  button:hover, button:focus { background: #f2f3f5; outline: none; }
+  button.active { background: #e8f0ff; color: #3370ff; font-weight: 600; }
+}
+
+.task-list-page {
+  min-width: 0;
+  width: 100%;
+  .ant-table-wrapper { max-width: 100%; overflow-x: auto; }
+  .task-list-heading { margin-bottom: 16px; color: #1f2329; font-size: 16px; font-weight: 600; }
+  .task-list-name { display: inline-block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .task-list-actions { display: flex; white-space: nowrap; }
+  .task-list-actions .ant-btn { padding: 0 5px; border: 0; background: transparent; }
+  .task-list-delete { color: #f53f3f; }
+  .ant-pagination { margin-top: 16px; text-align: right; }
+}
+
+@media (max-width: 900px) {
+  .byte-case-list { gap: 8px; padding: 8px; }
+  .case-management-nav { flex-basis: 116px; padding: 12px 4px; }
+  .case-management-nav .case-management-title { padding-left: 8px; font-size: 12px; }
 }
 
 .ant-modal-content {

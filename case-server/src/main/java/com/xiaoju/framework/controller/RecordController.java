@@ -31,6 +31,13 @@ public class RecordController {
     @Resource
     RecordService recordService;
 
+    @GetMapping(value = "/page")
+    public Response<?> getRecordPage(@RequestParam Long productLineId,
+                                     @RequestParam(defaultValue = "1") Integer pageNum,
+                                     @RequestParam(defaultValue = "10") Integer pageSize) {
+        return Response.success(recordService.getPageByProductLineId(productLineId, pageNum, pageSize));
+    }
+
     /**
      * 列表 - 根据用例下获取所有执行任务
      *

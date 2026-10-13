@@ -1,11 +1,35 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Button, Icon, Input } from 'antd'
 import PropTypes from 'prop-types'
+import { highlightNodeText } from './searchHighlight'
 
 const MindMapSearch = ({ minder }) => {
   const [keyword, setKeyword] = useState('')
   const [results, setResults] = useState(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  const highlights = useRef({ cancel: 0, cleanups: [] })
+
+  const clearHighlights = () => {
+    highlights.current.cancel += 1
+    highlights.current.cleanups.forEach(cleanup => cleanup())
+    highlights.current.cleanups = []
+  }
+
+  useEffect(() => () => clearHighlights(), [])
+
+  const highlightMatches = (items, value) => {
+    const token = highlights.current.cancel
+    let offset = 0
+    const paint = () => {
+      if (token !== highlights.current.cancel) return
+      const end = Math.min(offset + 80, items.length)
+      for (; offset < end; offset += 1) {
+        highlights.current.cleanups.push(highlightNodeText(items[offset], value))
+      }
+      if (offset < items.length) window.requestAnimationFrame(paint)
+    }
+    window.requestAnimationFrame(paint)
+  }
 
   const focusCanvas = () => {
     const container = document.querySelector('.kityminder-core-container')
@@ -22,6 +46,7 @@ const MindMapSearch = ({ minder }) => {
 
   const search = value => {
     const normalized = value.trim().toLowerCase()
+    clearHighlights()
     minder.fire('hidenoterequest')
     focusCanvas()
     if (!normalized) {
@@ -51,6 +76,7 @@ const MindMapSearch = ({ minder }) => {
     setResults(matches)
     setActiveIndex(0)
     selectResult(matches, 0)
+    highlightMatches(matches, normalized)
   }
 
   const move = offset => {
@@ -58,6 +84,7 @@ const MindMapSearch = ({ minder }) => {
     const next = (activeIndex + offset + results.length) % results.length
     setActiveIndex(next)
     selectResult(results, next)
+    highlights.current.cleanups.push(highlightNodeText(results[next], keyword.trim()))
   }
 
   return (

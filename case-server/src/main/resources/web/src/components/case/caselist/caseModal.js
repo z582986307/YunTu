@@ -16,6 +16,7 @@ import {
 const { Dragger } = Upload;
 import './index.scss';
 import caseTemplate from './testcase-template.xlsx'
+import { fileTitle } from './formDefaults'
 const initData = `{"root":{"data":{"id":"bv8nxhi3c800","created":1562059643204,"text":"中心主题"},"children":[]},"template":"default","theme":"fresh-blue","version":"1.4.43","base":0}`;
 const formItemLayout = {
   labelCol: { span: 6 },
@@ -250,6 +251,7 @@ class CaseModal extends React.Component {
       },
       beforeUpload: file => {
         this.setState(state => ({ caseFile: file }));
+        if (operate === 'add') this.props.form.setFieldsValue({ case: fileTitle(file.name) });
         const isLt2M = file.size / 1024 / 1024 <= 100;
         if (!isLt2M) {
           message.error('用例文件大小不能超过100M');

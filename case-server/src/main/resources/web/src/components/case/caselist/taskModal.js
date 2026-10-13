@@ -20,6 +20,7 @@ const formItemLayout = {
 };
 import request from '@/utils/axios';
 import getQueryString from '@/utils/getCookies';
+import { taskTitle } from './formDefaults';
 const getCookies = getQueryString.getCookie;
 const { RangePicker } = DatePicker;
 
@@ -201,7 +202,7 @@ class TaskModal extends React.Component {
             initialValue:
               this.props.titleModeTask == '编辑测试任务'
                 ? this.props.record.title
-                : '',
+                : taskTitle(this.props.record),
           })(<Input placeholder="请输入名称" />)}
         </Form.Item>
 
@@ -218,7 +219,25 @@ class TaskModal extends React.Component {
                 ? this.props.record.owner
                 : '',
           })(
-            <Input placeholder="请输入负责人" />,
+            <Select
+              showSearch
+              allowClear
+              placeholder="请选择已注册用户"
+              filterOption={false}
+              onSearch={this.props.getOwnerList}
+              notFoundContent={fetching ? '搜索中...' : '输入用户名搜索已注册用户'}
+            >
+              {(ownerList || []).map(item => (
+                <Option key={item} value={item}>
+                  {item}
+                </Option>
+              ))}
+              {this.props.titleModeTask === '编辑测试任务' && this.props.record.owner &&
+                !(ownerList || []).includes(this.props.record.owner) &&
+                <Option key={this.props.record.owner} value={this.props.record.owner}>
+                  {this.props.record.owner}
+                </Option>}
+            </Select>,
             // <Select
             //   mode="multiple"
             //   placeholder="请输入负责人"

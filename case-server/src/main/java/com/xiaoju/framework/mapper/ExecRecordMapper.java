@@ -3,6 +3,7 @@ package com.xiaoju.framework.mapper;
 import com.xiaoju.framework.entity.dto.RecordNumDto;
 import com.xiaoju.framework.entity.persistent.ExecRecord;
 import org.springframework.stereotype.Repository;
+import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
@@ -39,6 +40,8 @@ public interface ExecRecordMapper {
      * @return 任务列表
      */
     List<ExecRecord> getRecordListByCaseId(Long caseId);
+
+    List<ExecRecord> getRecordPageByProductLineId(@Param("productLineId") Long productLineId);
 
 
     /**
