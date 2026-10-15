@@ -305,7 +305,7 @@ class FileTree extends React.Component {
         );
       } else {
         item.title = (
-          <div className="titleContainer">
+          <div className="titleContainer" data-full-name={displayText}>
             <Tooltip className="tipClass" title={displayText}>
               {searchIndex > -1 ? (
                 <div className="item-label">
@@ -500,28 +500,37 @@ class FileTree extends React.Component {
               placeholder="搜索类别"
               onChange={this.onChange}
             />
-            <DirectoryTree
-              draggable
-              onDrop={this.onDrop}
-              multiple
-              selectedKeys={treeSelect ? [treeSelect] : []}
-              onExpand={this.onExpand}
-              expandedKeys={expandedKeys}
-              autoExpandParent={autoExpandParent}
-              defaultExpandAll
-              onSelect={selectedKeys => {
-                if (selectedKeys.length > 0) {
-                  let newSelect = selectedKeys[0];
-                  if (this.state.treeSelect != newSelect) {
-                    this.setState({ treeSelect: newSelect }, () => {
-                      this.addMenber(selectedKeys);
-                    });
-                  }
-                }
+            <div
+              onMouseOver={event => {
+                const row = event.target.closest('li');
+                if (!row) return;
+                const label = row.querySelector(':scope > .ant-tree-node-content-wrapper .titleContainer[data-full-name]');
+                if (label) row.title = label.getAttribute('data-full-name');
               }}
             >
-              {this.renderTreeNodes(treeData)}
-            </DirectoryTree>
+              <DirectoryTree
+                draggable
+                onDrop={this.onDrop}
+                multiple
+                selectedKeys={treeSelect ? [treeSelect] : []}
+                onExpand={this.onExpand}
+                expandedKeys={expandedKeys}
+                autoExpandParent={autoExpandParent}
+                defaultExpandAll
+                onSelect={selectedKeys => {
+                  if (selectedKeys.length > 0) {
+                    let newSelect = selectedKeys[0];
+                    if (this.state.treeSelect != newSelect) {
+                      this.setState({ treeSelect: newSelect }, () => {
+                        this.addMenber(selectedKeys);
+                      });
+                    }
+                  }
+                }}
+              >
+                {this.renderTreeNodes(treeData)}
+              </DirectoryTree>
+            </div>
           </div>
         </div>
       </ResizePanel>

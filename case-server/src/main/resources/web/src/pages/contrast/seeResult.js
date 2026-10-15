@@ -1,6 +1,6 @@
 /** 历史版本对比结果 */
 import React from 'react';
-import { message, Spin, Card, Tag } from 'antd';
+import { message, Spin, Card, Tag, Button } from 'antd';
 import moment from 'moment';
 moment.locale('zh-cn');
 import request from '@/utils/axios';
@@ -41,6 +41,15 @@ class SeeResult extends React.Component {
     return (
       <React.Fragment>
         <Headers light />
+        <div className="history-navigation">
+          <Button type="link" icon="arrow-left" onClick={() => {
+            const { caseId } = this.props.match.params;
+            if (caseId) this.props.history.push(`/history/${caseId}`);
+            else this.props.history.goBack();
+          }}>
+            返回
+          </Button>
+        </div>
         <Spin tip="Loading..." spinning={this.state.loading}>
           <div className="historyBox">
             <div className="box_title">
@@ -75,7 +84,7 @@ class SeeResult extends React.Component {
               editorStyle={{ height: 'calc(100vh - 240px)' }}
               toolbar={{
                 image: true,
-                theme: ['classic-compact', 'fresh-blue', 'fresh-green-compat'],
+                theme: ['classic-compact', 'fresh-blue', 'byte-blue', 'ink-black', 'fresh-green-compat'],
                 template: ['default', 'right', 'fish-bone'],
                 noteTemplate: '# test',
               }}

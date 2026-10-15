@@ -89,3 +89,18 @@ test('历史版本页返回按钮回到上一页', () => {
   button.props.onClick();
   expect(history.goBack).toHaveBeenCalledTimes(1);
 });
+
+test('版本对比页返回到该用例的历史版本', () => {
+  const history = { push: jest.fn(), goBack: jest.fn() };
+  const page = new Compare({ match: { params: { caseId: '7', backupId: '12' } }, history });
+  const findBack = node => {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props && node.props.children === '返回') return node;
+    const children = node.props && node.props.children;
+    return (Array.isArray(children) ? children : [children]).map(findBack).find(Boolean);
+  };
+  const button = findBack(page.render());
+  expect(button).not.toBeNull();
+  button.props.onClick();
+  expect(history.push).toHaveBeenCalledWith('/history/7');
+});

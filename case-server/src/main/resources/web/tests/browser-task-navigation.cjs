@@ -75,6 +75,27 @@ async function main() {
       '用例表不再内嵌任务行')
     assert(await page.$eval('.table-wrap .case-list-actions', node =>
       ['编辑', '创建任务', '复制', '更多'].every(label => node.textContent.includes(label))))
+    const moreBounds = await page.evaluate(() => {
+      const buttons = Array.from(document.querySelectorAll('.table-wrap .case-list-actions button'))
+        .filter(node => node.textContent.trim() === '更多')
+      return buttons.map(button => {
+        const bounds = button.getBoundingClientRect()
+        return { left: bounds.left, right: bounds.right, viewport: window.innerWidth }
+      })
+    })
+    assert(moreBounds.some(bounds => bounds.left >= 0 && bounds.right <= bounds.viewport),
+      `常用窗口宽度下更多按钮应完整可见：${JSON.stringify(moreBounds)}`)
+    await page.setViewport({ width: 1280, height: 900 })
+    assert(await page.evaluate(() => Array.from(document.querySelectorAll('.table-wrap .case-list-actions button'))
+      .filter(button => button.textContent.trim() === '更多')
+      .some(button => button.getBoundingClientRect().right <= window.innerWidth)),
+    '笔记本窗口宽度下更多按钮仍应可见')
+    await page.setViewport({ width: 1440, height: 900 })
+    assert(await page.$eval('.sidebar .ant-tree li .titleContainer[data-full-name]', node => {
+      const row = node.closest('li')
+      row.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+      return row.title === node.getAttribute('data-full-name')
+    }), '悬浮目录整行应能看到文件夹完整名称')
     assert(await page.$eval('.byte-case-list', node => getComputedStyle(node).gap === '0px'),
       '三栏布局使用连续浅分隔线，不保留卡片间隙')
     assert(await page.$eval('.case-management-nav', node => getComputedStyle(node).borderRadius === '0px'),

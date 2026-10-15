@@ -108,14 +108,14 @@ class Lists extends React.Component {
         title: '用例ID',
         dataIndex: 'id',
         key: 'id',
-        width: 90,
-        render: text => <div style={{ minWidth: '70px' }}>{text}</div>,
+        width: 72,
+        render: text => <span>{text}</span>,
       },
       {
         title: '用例名称',
         dataIndex: 'title',
         key: 'title',
-        width: 220,
+        width: 190,
         render: (text, record) => {
           let url = `${this.props.baseUrl}/caseManager/${this.props.productId}/${record.id}/undefined/0`;
           return <Link to={url}>{text}</Link>;
@@ -125,32 +125,32 @@ class Lists extends React.Component {
         title: '关联需求',
         dataIndex: 'requirementId',
         key: 'requirementId',
-        width: 200,
-        render: text => <div style={{ minWidth: '200px' }}>{text}</div>,
+        width: 160,
+        render: text => <span title={text}>{text}</span>,
       },
       {
         title: '最近更新人',
         dataIndex: 'modifier',
-        width: 120,
+        width: 100,
         key: 'modifier',
       },
       {
         title: '更新时间',
         dataIndex: 'gmtModified',
-        width: 180,
+        width: 145,
         key: 'gmtModified',
         render: text => <span>{text ? moment(text).format('YYYY-MM-DD HH:mm:ss') : '-'}</span>,
       },
       {
         title: '创建人',
         dataIndex: 'creator',
-        width: 100,
+        width: 80,
         key: 'creator',
       },
       {
         title: '创建时间',
         dataIndex: 'gmtCreated',
-        width: 180,
+        width: 145,
         key: 'gmtCreated',
         render: text => {
           return (
@@ -164,7 +164,8 @@ class Lists extends React.Component {
       {
         title: '操作',
         dataIndex: 'handle',
-        width: 220,
+        width: 208,
+        fixed: 'right',
         key: 'handle',
         render: (text, record) => {
           const { projectLs, requirementLs } = this.props.options;
@@ -688,7 +689,7 @@ class Lists extends React.Component {
           size="middle"
           loading={loading}
           pagination={false}
-          scroll={{ x: 1130 }}
+          scroll={{ x: 1100 }}
           footer={currentData => (
             <div style={{ height: '32px' }}>
               {

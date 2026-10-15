@@ -195,6 +195,9 @@ async function main() {
     assert.strictEqual(queuedSave.beforeAck, 0, '编辑版本未确认前不抢先保存');
     assert.deepStrictEqual(queuedSave.afterAck, ['save'], '编辑版本确认后再手动保存外观');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
+    await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
+      .find(button => button.textContent.trim() === '返回').click());
+    await page.waitForFunction(() => location.pathname === '/history/7');
     console.log('browser-history-versions: pass');
   } finally {
     if (browser) await browser.close();
