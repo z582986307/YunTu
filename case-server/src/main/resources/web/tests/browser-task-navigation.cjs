@@ -62,6 +62,10 @@ async function main() {
     await page.waitForSelector('.case-directory-heading')
     assert.strictEqual(await page.$eval('.yuntu-header-light', node => getComputedStyle(node).backgroundColor),
       'rgb(255, 255, 255)', '列表顶栏采用白色背景')
+    await page.hover('.yuntu-header-light .user')
+    await page.waitForSelector('.dropStyle .ant-dropdown-menu')
+    assert.strictEqual(await page.$eval('.dropStyle .ant-dropdown-menu', node => getComputedStyle(node).backgroundColor),
+      'rgb(255, 255, 255)', '用户名下拉菜单应为白色背景')
     assert(await page.$$eval('.table-wrap .ant-table-thead th', cells => cells.some(cell => cell.textContent.includes('更新时间'))),
       '用例列表显示更新时间列')
     assert(await page.$eval('.byte-case-list', node => node.getBoundingClientRect().left <= 1),
@@ -131,7 +135,10 @@ async function main() {
     assert.strictEqual(await page.$eval('.task-list-page .ant-table-tbody tr:first-child td:first-child',
       node => node.textContent.trim()), '9')
     await page.type('.task-list-filters input[placeholder^="搜索任务名称"]', '较新')
+    const filteredResponse = page.waitForResponse(response =>
+      decodeURIComponent(response.url()).includes('keyword=较新'))
     await page.click('.task-list-filters .ant-btn-primary')
+    await filteredResponse
     await page.waitForFunction(() => document.querySelector('.task-list-page') &&
       document.querySelector('.task-list-page .ant-table-tbody tr'))
     await page.waitForFunction(() => document.querySelector('.task-list-page .ant-table-tbody tr'))
@@ -140,6 +147,15 @@ async function main() {
     await page.screenshot({ path: shot })
     await page.click('.task-list-page .ant-table-tbody tr:first-child td:nth-child(3) a')
     await page.waitForFunction(() => location.pathname === '/caseManager/1/7/undefined/0')
+    await page.waitForSelector('.case-detail-requirement')
+    const headingStyles = await page.evaluate(() => {
+      const title = getComputedStyle(document.querySelector('.case-detail-title'))
+      const requirement = getComputedStyle(document.querySelector('.case-detail-requirement'))
+      return { title: [title.color, title.fontSize, title.fontWeight],
+        requirement: [requirement.color, requirement.fontSize, requirement.fontWeight] }
+    })
+    assert.deepStrictEqual(headingStyles.requirement, headingStyles.title,
+      '关联需求文案应与用例名称使用相同文字样式')
     console.log('browser-task-navigation: pass')
   } finally {
     if (browser) await browser.close()
