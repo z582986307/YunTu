@@ -487,9 +487,10 @@ class FileTree extends React.Component {
   render() {
     const { treeSelect, expandedKeys, autoExpandParent, treeData } = this.state;
     return treeData?.length > 0 ? (
-      <ResizePanel direction="e" style={{ flexGrow: 0, width: 300 }}>
+      <ResizePanel direction="e" style={{ flexGrow: 0, width: 240 }}>
         <div className="sidebar">
           <div>
+            <div className="case-directory-heading">目录</div>
             <Search
               style={{
                 paddingRight: '12px',

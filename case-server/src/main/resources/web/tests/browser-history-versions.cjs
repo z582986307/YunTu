@@ -19,10 +19,15 @@ async function main() {
       ]));
       return;
     }
-    if (request.url.startsWith('/api/backup/getCaseDiff')) {
+    if (request.url.startsWith('/api/backup/getCurrentCaseDiff')) {
       response.setHeader('Content-Type', 'application/json');
       response.end(json({
-        content: { base: 2, template: 'right', root: { data: { text: '版本比较结果' }, children: [] } },
+        content: { base: 2, template: 'right', root: { data: { text: '版本比较结果' }, children: [
+          { data: { id: 'branch', text: '分支' }, children: [
+            { data: { id: 'leaf-a', text: '叶子 A' }, children: [] },
+            { data: { id: 'leaf-b', text: '叶子 B' }, children: [] },
+          ] },
+        ] } },
         backupinfo: [{ user: 'tester', time: '2026-10-12T09:00:00' }, { user: 'tester', time: '2026-10-13T09:00:00' }],
       }));
       return;
@@ -76,11 +81,10 @@ async function main() {
     await page.waitForFunction(() => !document.querySelector('.ant-table .ant-spin-spinning'));
 
     await page.click('.ant-table-tbody tr:nth-child(1) .ant-checkbox-wrapper');
-    await page.click('.ant-table-tbody tr:nth-child(2) .ant-checkbox-wrapper');
-    assert.strictEqual(await page.$$eval('.ant-table-tbody .ant-checkbox-checked', boxes => boxes.length), 2);
+    assert.strictEqual(await page.$$eval('.ant-table-tbody .ant-checkbox-checked', boxes => boxes.length), 1);
     await page.evaluate(() => Array.from(document.querySelectorAll('button'))
-      .find(button => button.textContent.includes('对比已选择版本')).click());
-    await page.waitForFunction(() => location.pathname.includes('/historyContrast/'));
+      .find(button => button.textContent.includes('与当前版本对比')).click());
+    await page.waitForFunction(() => location.pathname.includes('/currentContrast/'));
     await page.waitForFunction(() => document.body.textContent.includes('版本比较结果'));
     assert(await page.evaluate(() => Array.from(document.querySelectorAll('svg text'))
       .some(node => node.textContent.includes('版本比较结果') && node.childElementCount === 0)));
@@ -130,6 +134,66 @@ async function main() {
       `编辑文字不缩小：${JSON.stringify(editMetrics)}`);
     assert(editMetrics.deltaLeft < 4 && editMetrics.deltaTop < 4,
       `编辑框覆盖原文字位置：${JSON.stringify(editMetrics)}`);
+    const editBorderDiagnostics = await page.evaluate(() => {
+      const node = window.__browserTestEditor.minder.getRoot();
+      const wrapper = document.querySelector('.edit-input');
+      const textarea = wrapper.querySelector('textarea');
+      const shape = node.getRenderer('TextRenderer').getRenderShape().node;
+      const bounds = value => { const rect = value.getBoundingClientRect(); return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right }; };
+      return { editor: bounds(wrapper), input: bounds(textarea), text: bounds(shape),
+        background: getComputedStyle(textarea).backgroundColor,
+        nodeBox: node.getRenderBox(), rendererNames: Object.keys(node._renderers || {}) };
+    });
+    assert(editBorderDiagnostics.input.bottom <= editBorderDiagnostics.editor.bottom + 1,
+      `编辑输入框不能盖住节点下边框：${JSON.stringify(editBorderDiagnostics)}`);
+    const collapsedCount = await page.evaluate(() => {
+      const minder = window.__browserTestEditor.minder;
+      const branch = minder.getRoot().getChildren()[0];
+      branch.collapse();
+      minder.layout();
+      return branch.expanderRenderer.expander.count.getContent();
+    });
+    assert.strictEqual(collapsedCount, '2', '折叠后显示末级节点数量');
+    const overflowCount = await page.evaluate(() => {
+      const branch = window.__browserTestEditor.minder.getRoot().getChildren()[0];
+      branch._collapsedLeafCount = 100;
+      branch.expanderRenderer.expander.setState('collapse', branch);
+      return branch.expanderRenderer.expander.count.getContent();
+    });
+    assert.strictEqual(overflowCount, '...', '超过 99 个末级节点显示省略号');
+    const themeMetrics = await page.evaluate(() => {
+      const minder = window.__browserTestEditor.minder;
+      minder.setTheme('byte-blue');
+      const baseline = { size: minder.getStyle('main-font-size'), padding: minder.getStyle('main-padding') };
+      minder.setTheme('classic');
+      const classic = { size: minder.getStyle('main-font-size'), padding: minder.getStyle('main-padding') };
+      minder.setTheme('ink-black');
+      const ink = { size: minder.getStyle('main-font-size'), padding: minder.getStyle('main-padding'),
+        text: minder.getStyle('main-color'), line: minder.getStyle('connect-color') };
+      return { baseline, classic, ink };
+    });
+    assert.deepStrictEqual(themeMetrics.classic, themeMetrics.baseline, '普通主题不改变节点字体和边距');
+    assert.strictEqual(themeMetrics.ink.text, '#111827');
+    assert.strictEqual(themeMetrics.ink.line, '#111827');
+    const queuedSave = await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      const sends = [];
+      const original = { ws: editor.ws, readOnly: editor.props.readOnly, base: editor.minder.getBase() };
+      editor.ws = { sendMessage: (kind, payload) => sends.push({ kind, payload }) };
+      editor.props.readOnly = false;
+      editor.expectedBase = original.base + 1;
+      editor.saveCurrentCase(true);
+      const beforeAck = sends.length;
+      editor.minder.setBase(original.base + 1);
+      editor.handleEditAck();
+      const afterAck = sends.map(send => send.kind);
+      editor.ws = original.ws;
+      editor.props.readOnly = original.readOnly;
+      editor.minder.setBase(original.base);
+      return { beforeAck, afterAck };
+    });
+    assert.strictEqual(queuedSave.beforeAck, 0, '编辑版本未确认前不抢先保存');
+    assert.deepStrictEqual(queuedSave.afterAck, ['save'], '编辑版本确认后再手动保存外观');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     console.log('browser-history-versions: pass');
   } finally {

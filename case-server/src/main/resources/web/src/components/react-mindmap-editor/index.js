@@ -1029,8 +1029,20 @@ class KityminderEditor extends Component {
   saveCurrentCase = manual => {
     if (!this.ws || !this.minder || this.props.readOnly) return;
     clearTimeout(this.autoSaveTimer);
+    if (this.expectedBase > this.minder.getBase()) {
+      this.queuedSaveManual = Boolean(manual || this.queuedSaveManual);
+      return;
+    }
     if (manual) this.manualSavePending = true;
     this.ws.sendMessage(manual ? 'save' : 'autosave', { caseContent: JSON.stringify(this.minder.exportJson()), patch: '', caseVersion: '' });
+  };
+
+  handleEditAck = () => {
+    if (this.queuedSaveManual !== undefined && this.expectedBase <= this.minder.getBase()) {
+      const manual = this.queuedSaveManual;
+      this.queuedSaveManual = undefined;
+      this.saveCurrentCase(manual);
+    }
   };
 
   onButtonSave = () => this.saveCurrentCase(true);
@@ -1102,6 +1114,7 @@ class KityminderEditor extends Component {
               handleRedoAck={this.handleRedoAck}
               handleWsUserStat={this.handleWsUserStat}
               handleSaveAck={this.handleSaveAck}
+              handleEditAck={this.handleEditAck}
               // onError={e => {
               //   notification.info({
               //     message: 'websocket连接错误，错误详情：' + e,
@@ -1122,7 +1135,7 @@ class KityminderEditor extends Component {
               }`}
               tabBarExtraContent={[
                 type !== 'compare' && <MindMapSearch key="search" minder={minder} />,
-                <Popover
+                type !== 'compare' && <Popover
                   key="list"
                   placement="bottomRight"
                   content={
@@ -1199,7 +1212,7 @@ class KityminderEditor extends Component {
                 >
                   {fullScreen ? '退出全屏' : '全屏'}
                 </Button>,
-                <Button
+                type !== 'compare' && <Button
                   key="show"
                   type="link"
                   className="mindmap-outlook-toggle"
@@ -1216,15 +1229,11 @@ class KityminderEditor extends Component {
               }}
             >
               <TabPane tab={null} key={type !== 'compare' ? '2' : '1'}>
-                <div className={tabContentClass}>
+                {type !== 'compare' && <div className={tabContentClass}>
                   <ThemeGroup {...childProps} />
                   <TemplateGroup {...childProps} />
-                  {type !== 'compare' && (
-                    <React.Fragment>
-                      <FontGroup {...childProps} />
-                    </React.Fragment>
-                  )}
-                </div>
+                  <FontGroup {...childProps} />
+                </div>}
               </TabPane>
             </Tabs>
           )}

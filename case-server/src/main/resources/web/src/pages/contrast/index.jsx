@@ -42,8 +42,8 @@ class Contrast extends React.Component {
   }
   contrastClick = () => {
     const { rows } = this.state
-    if (rows.length !== 2) return
-    this.props.history.push(`/caseManager/historyContrast/${rows[0].id}/${rows[1].id}`)
+    if (rows.length !== 1) return
+    this.props.history.push(`/caseManager/currentContrast/${this.props.match.params.caseId}/${rows[0].id}`)
   }
   restoreClick = record => {
     Modal.confirm({
@@ -101,13 +101,13 @@ class Contrast extends React.Component {
         this.setState({ rowKeys: selectedRowKeys, rows: selectedRows })
       },
       getCheckboxProps: record => ({
-        disabled: this.state.rowKeys.length >= 2 && !this.state.rowKeys.includes(record.id),
+        disabled: this.state.rowKeys.length >= 1 && !this.state.rowKeys.includes(record.id),
         name: record.name,
       }),
     }
     return (
       <section style={{ marginBottom: 30 }}>
-        <Headers />
+        <Headers light />
         <div className="history-navigation">
           <Button type="link" icon="arrow-left" onClick={() => this.props.history.goBack()}>
             返回
@@ -115,20 +115,20 @@ class Contrast extends React.Component {
         </div>
         <Card
           bordered={false}
-          className={this.state.rowKeys.length >= 2 ? 'contras_card' : 'contras_card_default'}
+          className={this.state.rowKeys.length >= 1 ? 'contras_card' : 'contras_card_default'}
         >
           <div className="contras_title">
             {/* <span>历史版本</span> */}
             <Tooltip
               placement="top"
-              title={this.state.rowKeys.length < 2 ? '选择两个版本后，才可以对比哦～' : null}
+              title={this.state.rowKeys.length < 1 ? '选择一个历史版本，与当前用例对比' : null}
             >
               <Button
                 type="primary"
-                disabled={this.state.rowKeys.length < 2}
+                disabled={this.state.rowKeys.length < 1}
                 onClick={this.contrastClick}
               >
-                对比已选择版本
+                与当前版本对比
               </Button>
             </Tooltip>
           </div>

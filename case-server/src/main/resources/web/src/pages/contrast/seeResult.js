@@ -18,12 +18,10 @@ class SeeResult extends React.Component {
   }
   componentDidMount() {
     this.setState({ loading: true });
-    request(`/backup/getCaseDiff`, {
+    const { caseId, backupId, caseId1, caseId2 } = this.props.match.params;
+    request(caseId ? '/backup/getCurrentCaseDiff' : '/backup/getCaseDiff', {
       method: 'GET',
-      params: {
-        caseId1: this.props.match.params.caseId1,
-        caseId2: this.props.match.params.caseId2,
-      },
+      params: caseId ? { caseId, backupId } : { caseId1, caseId2 },
     }).then(res => {
       if (res.code === 200 && res.data && res.data.content && res.data.content.root) {
         this.editorNode.setEditerData(res.data.content).then(() => {
@@ -42,20 +40,21 @@ class SeeResult extends React.Component {
   render() {
     return (
       <React.Fragment>
-        <Headers />
+        <Headers light />
         <Spin tip="Loading..." spinning={this.state.loading}>
           <div className="historyBox">
             <div className="box_title">
-              <Card bordered={false} title="版本比较" className="title_history">
+              <Card bordered={false} title="测试用例版本对比" className="title_history">
                 <div style={{ display: 'flex' }}>
                   {this.state.info &&
                     this.state.info.map((item, i) => (
                       <Card style={{ marginRight: 20 }} key={i}>
                         <span>
-                          创建人: {item.user}
+                          {i === 0 ? '选中历史版本' : '当前测试用例'}<br />
+                          更新人: {item.user || '-'}
                           <br />
-                          创建时间:{' '}
-                          {moment(item.time).format('YYYY-MM-DD HH:mm:ss')}
+                          更新时间:{' '}
+                          {item.time ? moment(item.time).format('YYYY-MM-DD HH:mm:ss') : '-'}
                         </span>
                       </Card>
                     ))}
@@ -70,7 +69,7 @@ class SeeResult extends React.Component {
             <YunTuEditor
               ref={editorNode => (this.editorNode = editorNode)}
               tags={['前置条件', '执行步骤', '预期结果']}
-              progressShow={true}
+              progressShow={false}
               readOnly={true}
               mediaShow={true}
               editorStyle={{ height: 'calc(100vh - 240px)' }}

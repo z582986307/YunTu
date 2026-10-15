@@ -3852,7 +3852,31 @@
         },
         getThemeItems: function (node) {
           var theme = this.getTheme(node);
-          return _themes[this.getTheme(node)];
+          if (theme === 'byte-blue' || theme === 'fresh-green-compat') return _themes[theme];
+          var source = _themes[theme];
+          if (!source) return _themes['byte-blue'];
+          if (!source._stableGeometry) {
+            var normalized = {};
+            var key;
+            for (key in source) normalized[key] = source[key];
+            var baseline = _themes['byte-blue'];
+            var geometry = ['font-size', 'padding', 'margin', 'radius', 'space', 'stroke-width'];
+            var levels = ['root', 'main', 'sub'];
+            for (var i = 0; i < levels.length; i++) {
+              for (var j = 0; j < geometry.length; j++) {
+                key = levels[i] + '-' + geometry[j];
+                if (key in baseline) normalized[key] = baseline[key];
+                else delete normalized[key];
+              }
+              delete normalized[levels[i] + '-shape'];
+            }
+            normalized['connect-width'] = baseline['connect-width'];
+            normalized['main-connect-width'] = baseline['connect-width'];
+            normalized['line-height'] = baseline['line-height'];
+            normalized._stableGeometry = true;
+            _themes[theme] = normalized;
+          }
+          return _themes[theme];
         },
         /**
          * 获得脑图实例上的样式
@@ -5509,7 +5533,9 @@
             this.radius = 6;
             this.outline = new kity.Circle(this.radius).stroke('#78a9ef').fill('#f4f8ff');
             this.sign = new kity.Path().stroke('#3370ff');
-            this.addShapes([this.outline, this.sign]);
+            this.count = new kity.Text().setX(0).setY(0).setTextAnchor('middle')
+              .setVerticalAlign('middle').setFontSize(8).fill('#2563eb');
+            this.addShapes([this.outline, this.sign, this.count]);
             this.initEvent(node);
             this.setId(utils.uuid('node_expander'));
             this.setStyle('cursor', 'pointer');
@@ -5532,16 +5558,35 @@
               e.preventDefault();
             });
           },
-          setState: function (state) {
+          setState: function (state, node) {
             if (state == 'hide') {
               this.setVisible(false);
               return;
             }
             this.setVisible(true);
-            var pathData = ['M', 1.5 - this.radius, 0, 'L', this.radius - 1.5, 0];
-            if (state == STATE_COLLAPSE) {
-              pathData.push(['M', 0, 1.5 - this.radius, 'L', 0, this.radius - 1.5]);
+            if (state == STATE_COLLAPSE && node) {
+              if (node._collapsedLeafCount == null) {
+                var leaves = 0;
+                var pending = node.children.slice();
+                while (pending.length) {
+                  var child = pending.pop();
+                  if (!child.children.length) leaves++;
+                  else for (var i = 0; i < child.children.length; i++) pending.push(child.children[i]);
+                }
+                node._collapsedLeafCount = leaves;
+              }
+              this.count.setContent(node._collapsedLeafCount > 99 ? '...' : String(node._collapsedLeafCount));
+              this.count.setVisible(true);
+              this.radius = 10;
+              this.outline.setRadius(10);
+            } else {
+              this.count.setVisible(false);
+              this.radius = 6;
+              this.outline.setRadius(6);
+              if (node) node._collapsedLeafCount = null;
             }
+            var pathData = ['M', 1.5 - this.radius, 0, 'L', this.radius - 1.5, 0];
+            if (state == STATE_COLLAPSE) pathData = [];
             this.sign.setPathData(pathData);
           },
         });
@@ -5563,7 +5608,7 @@
             if (!node.parent) return;
             var visible = node.parent.isExpanded();
             expander.setState(
-              visible && node.children.length ? node.getData(EXPAND_STATE_DATA) : 'hide'
+              visible && node.children.length ? node.getData(EXPAND_STATE_DATA) : 'hide', node
             );
             var vector = node
               .getLayoutVectorOut()
@@ -9929,7 +9974,7 @@
         purple: 246,
         pink: 334,
       };
-      theme.register('byte-blue', {
+      var byteBlueTheme = {
         background: '#ffffff',
         'root-color': '#1f3b64',
         'root-background': '#e7f1ff',
@@ -9972,7 +10017,21 @@
         'order-hint-path-width': 1,
         'text-selection-color': '#1d4ed8',
         'line-height': 1.5,
-      });
+      };
+      theme.register('byte-blue', byteBlueTheme);
+      var blackTheme = {};
+      var blueTheme = byteBlueTheme;
+      for (var blackKey in blueTheme) blackTheme[blackKey] = blueTheme[blackKey];
+      blackTheme['root-color'] = '#111827';
+      blackTheme['main-color'] = '#111827';
+      blackTheme['sub-color'] = '#111827';
+      blackTheme['root-stroke'] = '#1f2937';
+      blackTheme['main-stroke'] = '#1f2937';
+      blackTheme['sub-stroke'] = '#1f2937';
+      blackTheme['connect-color'] = '#111827';
+      blackTheme['root-background'] = '#f8fafc';
+      blackTheme['main-background'] = '#ffffff';
+      theme.register('ink-black', blackTheme);
       var name;
       for (name in plans) {
         theme.register('fresh-' + name, generate(plans[name]));

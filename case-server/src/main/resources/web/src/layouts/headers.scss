@@ -1,0 +1,44 @@
+.ant-layout-header.yuntu-header-light {
+  height: 64px;
+  padding: 0 24px;
+  background: #fff;
+  border-bottom: 1px solid #e5e9f0;
+  line-height: 64px;
+
+  > a {
+    font-weight: 600;
+  }
+
+  .user {
+    height: 36px;
+    margin-top: 14px;
+    padding: 0 8px 0 0;
+    color: #1f2329;
+    background: transparent;
+    border: 1px solid transparent;
+
+    &:hover, &:focus-within {
+      background: #f7f9fc;
+      border-color: #e5e9f0;
+    }
+
+    .userIcon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      color: #fff;
+      background: #3370ff;
+      border-radius: 9px;
+      font-size: 16px;
+    }
+
+    .username {
+      margin: 0 12px;
+      font-weight: 600;
+    }
+
+    .dowm { color: #86909c; font-size: 12px; }
+  }
+}

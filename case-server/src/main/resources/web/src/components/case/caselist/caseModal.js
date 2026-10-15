@@ -349,22 +349,12 @@ class CaseModal extends React.Component {
                     onClick={() => this.setState({ caseFile: null })}><Icon type="close" /></button>
                 </div>
               ) : <React.Fragment>
-                <div className="div-flex-child-1">
                   <Dragger {...props}>
-                    <Icon
-                      type="plus-circle"
-                      style={{ color: '#447CE6', fontSize: '24px' }}
-                    />
-                  </Dragger>
-                </div>
-                <div className="div-flex-child-2">
-                  <div>
                     <span className="span-text span-text-bold">上传文件（非必传）</span>
                     <span className="span-text span-text-light">
                       支持.xmind和excel文件，excel请按照<a href={caseTemplate} download="testcase-template.xlsx">模板</a>填写...
                     </span>
-                  </div>
-                </div>
+                  </Dragger>
               </React.Fragment>}
             </Col>
           </Row>

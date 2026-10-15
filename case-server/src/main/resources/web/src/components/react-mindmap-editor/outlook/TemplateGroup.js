@@ -27,7 +27,7 @@ class TemplateGroup extends Component {
       );
     }
     return (
-      <div className="nodes-actions" style={{ width: 140 }}>
+      <div className="nodes-actions mindmap-appearance-template" style={{ width: 140 }}>
         <Select
           dropdownMatchSelectWidth={false}
           getPopupContainer={(triggerNode) => triggerNode.parentNode}

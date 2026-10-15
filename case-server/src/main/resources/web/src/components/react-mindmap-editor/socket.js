@@ -83,6 +83,7 @@ class Socket extends React.Component {
             // const recvFromBase = recvPatches.filter((item) => item.path === '/base')[0]?.fromValue;
             try {
                 this.props.wsMinder.applyPatches(recvPatches);
+                if (typeof this.props.handleEditAck === 'function') this.props.handleEditAck();
             } catch(e) {
                 alert('客户端接受应答消息异常，请刷新重试');
             }

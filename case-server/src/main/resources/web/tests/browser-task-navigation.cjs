@@ -14,7 +14,11 @@ async function main() {
   const taskPageQueries = []
   const server = http.createServer((request, response) => {
     let body = null
-    if (request.url.startsWith('/api/dir/list') || request.url.startsWith('/api/dir/cardTree')) body = { children: [] }
+    if (request.url.startsWith('/api/dir/list') || request.url.startsWith('/api/dir/cardTree')) body = {
+      children: [{ id: 'root', text: 'root', caseIds: [], children: [
+        { id: '2026', text: '2026', caseIds: [], children: [] },
+      ] }],
+    }
     if (request.url.startsWith('/api/case/listCreators')) body = []
     if (request.url.startsWith('/api/case/list')) body = { dataSources: [
       { id: 7, title: '客户管理', creator: 'tester', modifier: 'tester', recordNum: 1,
@@ -50,25 +54,59 @@ async function main() {
       args: ['--disable-extensions', '--no-first-run'],
     })
     const page = await browser.newPage()
+    await page.setViewport({ width: 1440, height: 900 })
     const base = `http://127.0.0.1:${server.address().port}`
     await page.setCookie({ name: 'username', value: 'fixture-user', url: base })
     await page.goto(`${base}/case/caseList/1`, { waitUntil: 'networkidle2' })
     await page.waitForSelector('.case-management-nav')
+    await page.waitForSelector('.case-directory-heading')
+    assert.strictEqual(await page.$eval('.yuntu-header-light', node => getComputedStyle(node).backgroundColor),
+      'rgb(255, 255, 255)', '列表顶栏采用白色背景')
+    assert(await page.$$eval('.table-wrap .ant-table-thead th', cells => cells.some(cell => cell.textContent.includes('更新时间'))),
+      '用例列表显示更新时间列')
+    assert(await page.$eval('.byte-case-list', node => node.getBoundingClientRect().left <= 1),
+      '用例管理三栏从页面左边缘开始展示')
     assert(await page.evaluate(() => document.querySelector('.case-management-nav').textContent.includes('测试用例管理')))
     assert.strictEqual(await page.$$('.table-wrap .ant-table-row-expand-icon').then(items => items.length), 0,
       '用例表不再内嵌任务行')
     assert(await page.$eval('.table-wrap .case-list-actions', node =>
       ['编辑', '创建任务', '复制', '更多'].every(label => node.textContent.includes(label))))
+    assert(await page.$eval('.byte-case-list', node => getComputedStyle(node).gap === '0px'),
+      '三栏布局使用连续浅分隔线，不保留卡片间隙')
+    assert(await page.$eval('.case-management-nav', node => getComputedStyle(node).borderRadius === '0px'),
+      '菜单采用截图中的直角栏布局')
+    const moreButton = await page.evaluateHandle(() => Array.from(document.querySelectorAll('.table-wrap .case-list-actions button'))
+      .find(button => button.textContent.trim() === '更多'))
+    await moreButton.hover()
+    await page.waitForSelector('.ant-dropdown-menu .delete-action')
+    assert.strictEqual(await page.$eval('.ant-dropdown-menu .delete-action', node => getComputedStyle(node).color),
+      'rgb(245, 63, 63)', '用例删除操作必须显示红色')
+    await page.keyboard.press('Escape')
     await page.screenshot({ path: path.join(evidence, '用例列表.png') })
     await page.evaluate(() => Array.from(document.querySelectorAll('button'))
       .find(button => button.textContent.includes('新建用例')).click())
     await page.waitForSelector('.oe-caseModal-style-wrap input[id="case"]')
+    await page.waitForFunction(() => document.querySelector('.oe-caseModal-style-wrap .dragger')
+      .getBoundingClientRect().width > 340)
+    assert(!(await page.$eval('.oe-caseModal-style-wrap .dragger', node => node.innerHTML)).includes('plus-circle'),
+      '上传前不显示加号图标')
+    const preUploadWidth = await page.$eval('.oe-caseModal-style-wrap .dragger', node => ({
+      outer: node.getBoundingClientRect().width,
+      inner: node.querySelector('.ant-upload.ant-upload-drag').getBoundingClientRect().width,
+    }))
+    assert(preUploadWidth.inner >= preUploadWidth.outer - 2,
+      `上传前文案和点击区域占满上传框：${JSON.stringify(preUploadWidth)}`)
+    await page.screenshot({ path: path.join(evidence, '上传前弹窗.png') })
     const upload = await page.$('.oe-caseModal-style-wrap input[type="file"]')
     await upload.uploadFile(path.join(__dirname, '../src/components/case/caselist/testcase-template.xlsx'))
     await page.waitForFunction(() => document.querySelector('.oe-caseModal-style-wrap input[id="case"]')
       .value === 'testcase-template')
     assert.strictEqual(await page.$eval('.uploaded-case-file span', node => node.textContent), 'testcase-template.xlsx')
     assert(!(await page.$eval('.oe-caseModal-style-wrap', node => node.textContent)).includes('上传文件（非必传）'))
+    assert(await page.$eval('.uploaded-case-file', node =>
+      node.getBoundingClientRect().width >= node.parentElement.getBoundingClientRect().width - 2),
+    '上传后文件名区域占满上传框')
+    await page.screenshot({ path: path.join(evidence, '上传用例弹窗.png') })
     await page.keyboard.press('Escape')
     await page.waitForSelector('.oe-caseModal-style-wrap', { hidden: true })
     await page.evaluate(() => Array.from(document.querySelectorAll('.table-wrap .ant-table-tbody tr:first-child button'))

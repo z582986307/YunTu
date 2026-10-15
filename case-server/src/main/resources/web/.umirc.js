@@ -196,6 +196,10 @@ export default {
           component: './contrast/seeResult.js',
         },
         {
+          path: '/caseManager/currentContrast/:caseId/:backupId',
+          component: './contrast/seeResult.js',
+        },
+        {
           path: '*',
           redirect: '/',
         },

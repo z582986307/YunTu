@@ -58,6 +58,11 @@ public class BackupController {
         return Response.success(caseBackupService.getCaseDiff(caseId1, caseId2));
     }
 
+    @GetMapping(value = "/getCurrentCaseDiff")
+    public Response<JsonNode> getCurrentCaseDiff(@RequestParam Long caseId, @RequestParam Long backupId) {
+        return Response.success(caseBackupService.getCurrentCaseDiff(caseId, backupId));
+    }
+
     /**
      * 删除某个用例所有的备份记录
      *

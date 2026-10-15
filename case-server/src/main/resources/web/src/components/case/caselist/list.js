@@ -135,6 +135,13 @@ class Lists extends React.Component {
         key: 'modifier',
       },
       {
+        title: '更新时间',
+        dataIndex: 'gmtModified',
+        width: 180,
+        key: 'gmtModified',
+        render: text => <span>{text ? moment(text).format('YYYY-MM-DD HH:mm:ss') : '-'}</span>,
+      },
+      {
         title: '创建人',
         dataIndex: 'creator',
         width: 100,

@@ -45,6 +45,100 @@ public class CaseBackupServiceImpl implements CaseBackupService {
     private TestCaseMapper caseMapper;
 
     @Override
+    public JsonNode getCurrentCaseDiff(Long caseId, Long backupId) {
+        TestCase currentCase = caseMapper.selectOne(caseId);
+        CaseBackup history = caseBackupMapper.selectByBackupId(backupId);
+        if (currentCase == null || history == null || !caseId.equals(history.getCaseId())) {
+            throw new CaseServerException("用例或历史版本不存在", StatusCode.INTERNAL_ERROR);
+        }
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            ObjectNode current = (ObjectNode) mapper.readTree(currentCase.getCaseContent());
+            JsonNode previous = mapper.readTree(history.getCaseContent());
+            Map<String, ObjectNode> currentNodes = new LinkedHashMap<>();
+            Map<String, ObjectNode> previousNodes = new LinkedHashMap<>();
+            Map<String, String> previousParents = new HashMap<>();
+            indexComparisonNodes(current.path("root"), currentNodes, null, null);
+            indexComparisonNodes(previous.path("root"), previousNodes, previousParents, null);
+            for (Map.Entry<String, ObjectNode> entry : currentNodes.entrySet()) {
+                ObjectNode node = entry.getValue();
+                ObjectNode old = previousNodes.get(entry.getKey());
+                if (old == null) {
+                    markComparisonBranch(node, "#ddfade");
+                    continue;
+                }
+                JsonNode data = node.path("data");
+                JsonNode oldData = old.path("data");
+                boolean changed = false;
+                for (String field : Arrays.asList("text", "image", "imageTitle", "imageSize",
+                        "hyperlink", "hyperlinkTitle", "note", "font-size", "font-family",
+                        "color", "background", "bold", "italic")) {
+                    if (!Objects.equals(data.path(field), oldData.path(field))) changed = true;
+                }
+                if (changed && data.isObject()) {
+                    ObjectNode resultData = (ObjectNode) data;
+                    if (!Objects.equals(data.path("text"), oldData.path("text"))) {
+                        resultData.put("text", "旧内容：" + oldData.path("text").asText("") + "\n新内容：" + data.path("text").asText(""));
+                    }
+                    resultData.put("background", "#d6f0ff");
+                }
+            }
+            for (Map.Entry<String, ObjectNode> entry : previousNodes.entrySet()) {
+                if (currentNodes.containsKey(entry.getKey())) continue;
+                String parentKey = previousParents.get(entry.getKey());
+                if (parentKey == null || !currentNodes.containsKey(parentKey)) continue;
+                ObjectNode ghost = entry.getValue().deepCopy();
+                markComparisonBranch(ghost, "#ffe7e7");
+                ((ArrayNode) currentNodes.get(parentKey).withArray("children")).add(ghost);
+            }
+            ObjectNode result = JsonNodeFactory.instance.objectNode();
+            result.set("content", current);
+            ArrayNode info = result.putArray("backupinfo");
+            ObjectNode oldInfo = info.addObject();
+            oldInfo.put("user", history.getCreator());
+            oldInfo.put("time", history.getGmtCreated().toString());
+            ObjectNode currentInfo = info.addObject();
+            currentInfo.put("user", currentCase.getModifier());
+            currentInfo.put("time", currentCase.getGmtModified() == null ? "" : currentCase.getGmtModified().toString());
+            return result;
+        } catch (IOException error) {
+            throw new CaseServerException("用例版本数据无法解析", StatusCode.INTERNAL_ERROR);
+        }
+    }
+
+    private void indexComparisonNodes(JsonNode root, Map<String, ObjectNode> nodes,
+                                      Map<String, String> parents, String parentKey) {
+        if (!root.isObject()) return;
+        Deque<JsonNode> pending = new ArrayDeque<>();
+        Deque<String> parentKeys = new LinkedList<>();
+        pending.push(root);
+        parentKeys.push(parentKey == null ? "" : parentKey);
+        while (!pending.isEmpty()) {
+            ObjectNode node = (ObjectNode) pending.pop();
+            String parent = parentKeys.pop();
+            String id = node.path("data").path("id").asText("");
+            if (id.isEmpty()) id = parent + "/" + nodes.size();
+            nodes.put(id, node);
+            if (parents != null) parents.put(id, parent.isEmpty() ? null : parent);
+            JsonNode children = node.path("children");
+            for (int i = children.size() - 1; i >= 0; i--) {
+                pending.push(children.get(i));
+                parentKeys.push(id);
+            }
+        }
+    }
+
+    private void markComparisonBranch(ObjectNode root, String color) {
+        Deque<JsonNode> pending = new ArrayDeque<>();
+        pending.push(root);
+        while (!pending.isEmpty()) {
+            JsonNode node = pending.pop();
+            if (node.path("data").isObject()) ((ObjectNode) node.path("data")).put("background", color);
+            for (JsonNode child : node.path("children")) pending.push(child);
+        }
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public synchronized CaseBackup insertBackup(CaseBackup caseBackup) {
         LOGGER.info(Thread.currentThread().getName() + ": 备份保存当前用例。");

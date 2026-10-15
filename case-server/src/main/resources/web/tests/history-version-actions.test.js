@@ -28,12 +28,35 @@ beforeEach(() => {
 test('对比页将完整脑图数据交给查看器', async () => {
   const content = { root: { data: { text: '中心' }, children: [] }, template: 'right', base: 2 };
   request.mockResolvedValueOnce({ code: 200, data: { content, backupinfo: [] } });
-  const page = new Compare({ match: { params: { caseId1: '11', caseId2: '12' } } });
+  const page = new Compare({ match: { params: { caseId: '7', backupId: '12' } } });
   page.setState = update => Object.assign(page.state, update);
   page.editorNode = { setEditerData: jest.fn(() => Promise.resolve()) };
   page.componentDidMount();
   await Promise.resolve();
   expect(page.editorNode.setEditerData).toHaveBeenCalledWith(content);
+  expect(request).toHaveBeenCalledWith('/backup/getCurrentCaseDiff', expect.objectContaining({
+    params: { caseId: '7', backupId: '12' },
+  }));
+});
+
+test('已有的双历史版本链接继续使用原对比接口', async () => {
+  request.mockResolvedValueOnce({ code: 200, data: { content: { root: { data: {}, children: [] } }, backupinfo: [] } });
+  const page = new Compare({ match: { params: { caseId1: '11', caseId2: '12' } } });
+  page.setState = update => Object.assign(page.state, update);
+  page.editorNode = { setEditerData: jest.fn(() => Promise.resolve()) };
+  page.componentDidMount();
+  await Promise.resolve();
+  expect(request).toHaveBeenCalledWith('/backup/getCaseDiff', expect.objectContaining({
+    params: { caseId1: '11', caseId2: '12' },
+  }));
+});
+
+test('历史页默认把当前用例与单选历史版本对比', () => {
+  const history = { push: jest.fn() };
+  const page = new History({ match: { params: { caseId: '7' } }, history });
+  page.state.rows = [{ id: 12 }];
+  page.contrastClick();
+  expect(history.push).toHaveBeenCalledWith('/caseManager/currentContrast/7/12');
 });
 
 test('恢复操作二次确认后才提交所选版本', async () => {

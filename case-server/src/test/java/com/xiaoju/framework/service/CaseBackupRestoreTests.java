@@ -105,6 +105,30 @@ public class CaseBackupRestoreTests {
     }
 
     @Test
+    public void currentComparisonMatchesNodesByIdAndIgnoresExecutionStatus() {
+        String previous = "{\"base\":1,\"root\":{\"data\":{\"id\":\"root\",\"text\":\"中心\"},\"children\":["
+                + "{\"data\":{\"id\":\"a\",\"text\":\"不变\"},\"children\":[]},"
+                + "{\"data\":{\"id\":\"b\",\"text\":\"旧文字\"},\"children\":[]}]}}";
+        String current = "{\"base\":2,\"root\":{\"data\":{\"id\":\"root\",\"text\":\"中心\"},\"children\":["
+                + "{\"data\":{\"id\":\"new\",\"text\":\"新增\"},\"children\":[]},"
+                + "{\"data\":{\"id\":\"a\",\"text\":\"不变\",\"progress\":9},\"children\":[]},"
+                + "{\"data\":{\"id\":\"b\",\"text\":\"新文字\"},\"children\":[]}]}}";
+        TestCase testCase = new TestCase();
+        testCase.setId(7L);
+        testCase.setCaseContent(current);
+        testCase.setModifier("tester");
+        testCase.setGmtModified(new Date());
+        when(cases.selectOne(7L)).thenReturn(testCase);
+        when(backups.selectByBackupId(11L)).thenReturn(backup(11L, 7L, previous));
+
+        JsonNode nodes = service.getCurrentCaseDiff(7L, 11L).path("content").path("root").path("children");
+        assertEquals("#ddfade", nodes.get(0).path("data").path("background").asText());
+        assertTrue(nodes.get(1).path("data").path("background").isMissingNode());
+        assertEquals("不变", nodes.get(1).path("data").path("text").asText());
+        assertEquals("#d6f0ff", nodes.get(2).path("data").path("background").asText());
+    }
+
+    @Test
     public void activeEditorPreventsRestoringOverUnsavedChanges() {
         TestCase testCase = new TestCase();
         testCase.setId(7L);

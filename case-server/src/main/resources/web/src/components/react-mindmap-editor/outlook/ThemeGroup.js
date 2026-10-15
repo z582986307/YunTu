@@ -24,7 +24,7 @@ class ThemeGroup extends Component {
       );
     }
     return (
-      <div className="nodes-actions" style={{ width: 120 }}>
+      <div className="nodes-actions mindmap-appearance-theme" style={{ width: 120 }}>
         <Select
           dropdownMatchSelectWidth={false}
           value={minder.queryCommandValue('Theme')}

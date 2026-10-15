@@ -243,15 +243,15 @@ class CaseLists extends React.Component {
           <button type="button" className="case-management-title"
             aria-expanded={this.state.navExpanded}
             onClick={() => this.setState(state => ({ navExpanded: !state.navExpanded }))}>
-            测试用例管理<span className={`case-management-chevron${this.state.navExpanded ? ' expanded' : ''}`} />
+            <span className="case-management-label"><Icon type="folder-open" />测试用例管理</span><span className={`case-management-chevron${this.state.navExpanded ? ' expanded' : ''}`} />
           </button>
           {this.state.navExpanded && <div className="case-management-submenu">
           <button type="button" className={this.state.viewMode === 'cases' ? 'active' : ''}
             aria-current={this.state.viewMode === 'cases' ? 'page' : undefined}
-            onClick={() => this.setState({ viewMode: 'cases' })}>测试用例</button>
+            onClick={() => this.setState({ viewMode: 'cases' })}><Icon type="file-text" />测试用例</button>
           <button type="button" className={this.state.viewMode === 'tasks' ? 'active' : ''}
             aria-current={this.state.viewMode === 'tasks' ? 'page' : undefined}
-            onClick={() => this.setState({ viewMode: 'tasks' })}>测试任务</button>
+            onClick={() => this.setState({ viewMode: 'tasks' })}><Icon type="schedule" />测试任务</button>
           </div>}
         </nav>
         {this.state.viewMode === 'cases' && <FileTree

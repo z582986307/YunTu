@@ -7,9 +7,9 @@ import Headers from '../../layouts/headers'
 class casePage extends React.Component {
   render() {
     return (
-      <section style={{ marginBottom: 30 }}>
-        <Headers />
-        <div style={{ padding: 24 }}>
+      <section>
+        <Headers light />
+        <div>
           <CaseLists
             {...this.props}
             type="oe"

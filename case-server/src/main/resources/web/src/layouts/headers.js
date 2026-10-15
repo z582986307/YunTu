@@ -4,6 +4,7 @@ import { Layout, Icon, Menu, Dropdown, Modal, Input, message } from 'antd'
 import getQueryString from '@/utils/getCookies'
 import '../pages/landing/less/index.less'
 import request from '@/utils/axios'
+import './headers.scss'
 const { Header } = Layout
 const getCookies = getQueryString.getCookie
 
@@ -70,8 +71,8 @@ class Headers extends React.Component {
     )
     return getCookies('username') ? (
       <React.Fragment>
-      <Header style={{ zIndex: 9 }}>
-        <a href="/" style={{ color: '#fff', fontSize: 24 }}>
+      <Header className={this.props.light ? 'yuntu-header-light' : ''} style={{ zIndex: 9 }}>
+        <a href="/" style={{ color: this.props.light ? '#111827' : '#fff', fontSize: this.props.light ? 20 : 24 }}>
           云图用例管理平台
         </a>
         {getCookies('username') ? (
