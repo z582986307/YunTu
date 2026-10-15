@@ -7226,7 +7226,7 @@
                 var data = node.getData(PROGRESS_DATA);
                 icon.setValue(data);
                 // 缩入节点左侧原有留白，图标和文字都不参与重新布局。
-                icon.setScale(0.49);
+                icon.setScale(0.56);
                 icon.setTranslate(box.left - 5.7, box.cy);
                 return null;
               },

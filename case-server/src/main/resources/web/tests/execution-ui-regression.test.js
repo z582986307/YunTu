@@ -34,6 +34,8 @@ assert(!doGroupStyles.includes('&:nth-child(2)') && !doGroupStyles.includes('> s
 assert(!styles.includes('.do-group .ant-btn-link'), '撤销重做的视觉样式应只由共享工具组件维护，避免尺寸冲突')
 assert(!view.includes('expandMenu'), '视图工具栏不应继续提供展开菜单')
 assert(panel.includes('renderExecutionStatusIcon(item)'), '悬浮窗结果按钮应使用统一状态图标')
+assert(core.includes('icon.setScale(0.56);'), '仅放大节点结果图案，保持节点布局占位不变')
+assert(!styles.includes('transform: scale(1.12);'), '悬浮窗结果按钮不应随节点图标放大')
 assert(!panel.includes('<Tooltip title={item.label}'), '结果按钮不应被 Tooltip 包装导致禁用态缩宽')
 assert(panel.includes('title={item.label}'), '结果按钮应保留原生提示')
 assert(utils.includes('<svg class="execution-status-icon'), '结果状态应使用统一 SVG 图标')
