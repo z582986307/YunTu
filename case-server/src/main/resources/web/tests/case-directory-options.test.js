@@ -4,7 +4,7 @@ jest.mock('antd', () => ({
   Form: { create: () => Component => Component },
   TreeSelect: { TreeNode: () => null },
   Upload: { Dragger: () => null },
-  message: {},
+  message: { success: jest.fn(), error: jest.fn() },
   Modal: () => null,
   Input: Object.assign(() => null, { TextArea: () => null }),
   Icon: () => null,

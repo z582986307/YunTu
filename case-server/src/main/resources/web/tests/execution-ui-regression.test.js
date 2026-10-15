@@ -2,6 +2,7 @@ const assert = require('assert')
 const fs = require('fs')
 const path = require('path')
 
+test('执行页脑图交互与结果标记保持回归约束', () => {
 const root = path.resolve(__dirname, '../src/components/react-mindmap-editor')
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 
@@ -107,3 +108,4 @@ assert(progressCommand.includes('if (!km._largeMindMap) km.layout();'), '大型�
 assert(core.includes('if (!node.getMinder()._largeMindMap) node.getMinder().layout(300);'), '大型脑图保存备注时不应触发整树布局')
 
 console.log('execution UI regression checks passed')
+})
