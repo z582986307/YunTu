@@ -1,6 +1,6 @@
 /** 历史版本对比结果 */
 import React from 'react';
-import { message, Spin, Card, Tag, Button } from 'antd';
+import { message, Spin, Card, Button } from 'antd';
 import moment from 'moment';
 moment.locale('zh-cn');
 import request from '@/utils/axios';
@@ -93,18 +93,13 @@ class SeeResult extends React.Component {
                 </div>
               </Card>
               <Card bordered={false} title="变更筛选" className="title_color">
-                <div className="comparison-filters" role="group" aria-label="筛选变更节点">
+                <div className="comparison-legend" role="group" aria-label="筛选变更节点">
                   {filterOptions.map(([value, label]) => (
-                    <Button key={value} className={activeFilter === value ? 'active' : ''}
+                    <Button key={value} className={`comparison-legend-item ${value}${activeFilter === value ? ' active' : ''}`}
                       aria-pressed={activeFilter === value} onClick={() => this.handleFilterChange(value)}>
                       {label}
                     </Button>
                   ))}
-                </div>
-                <div className="comparison-legend" aria-label="颜色标识">
-                  <Tag color="#ddfade">新增</Tag>
-                  <Tag color="#ffe7e7">删除</Tag>
-                  <Tag color="#d6f0ff">内容变更</Tag>
                 </div>
               </Card>
             </div>}

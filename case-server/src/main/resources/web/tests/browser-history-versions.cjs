@@ -86,7 +86,7 @@ async function main() {
       .find(button => button.textContent.includes('与当前版本对比')).click());
     await page.waitForFunction(() => location.pathname.includes('/currentContrast/'));
     await page.waitForFunction(() => document.body.textContent.includes('版本比较结果'));
-    await page.waitForSelector('.comparison-filters button');
+    await page.waitForSelector('.comparison-legend button');
     assert(await page.evaluate(() => document.body.textContent.includes('当前版本')), '当前版本标识可见');
     assert(await page.evaluate(() => Array.from(document.querySelectorAll('svg text'))
       .some(node => node.textContent.includes('版本比较结果') && node.childElementCount === 0)));
@@ -103,13 +103,15 @@ async function main() {
     await page.mouse.up({ button: 'middle' });
     const afterPan = await textPosition();
     assert(Math.abs(afterPan.x - beforePan.x) > 20, '中键拖动移动脑图');
-    await page.click('.comparison-filters button:nth-child(2)');
-    await page.waitForFunction(() => document.querySelector('.comparison-filters button.active').textContent.replace(/\s/g, '') === '新增');
+    assert.strictEqual(await page.$$eval('.comparison-legend button', buttons => buttons.length), 4,
+      '图例直接提供全部、新增、删除和内容变更四个筛选项');
+    await page.click('.comparison-legend button:nth-child(2)');
+    await page.waitForFunction(() => document.querySelector('.comparison-legend button.active').textContent.replace(/\s/g, '') === '新增');
     await page.waitForFunction(() => !Array.from(document.querySelectorAll('svg text'))
       .some(node => node.textContent.includes('叶子 B')));
     assert(await page.evaluate(() => Array.from(document.querySelectorAll('svg text'))
       .some(node => node.textContent.includes('叶子 A'))), '新增筛选保留匹配节点');
-    await page.click('.comparison-filters button:nth-child(1)');
+    await page.click('.comparison-legend button:nth-child(1)');
     await page.waitForFunction(() => Array.from(document.querySelectorAll('svg text'))
       .some(node => node.textContent.includes('叶子 B')));
     await page.evaluate(() => document.querySelector('.comparison-summary-toggle button').click());
@@ -206,6 +208,7 @@ async function main() {
       const editor = window.__browserTestEditor;
       const sends = [];
       const original = { ws: editor.ws, readOnly: editor.props.readOnly, base: editor.minder.getBase() };
+      window.minderData = { right: 1 };
       editor.ws = { sendMessage: (kind, payload) => sends.push({ kind, payload }) };
       editor.props.readOnly = false;
       editor.expectedBase = original.base + 1;
@@ -217,10 +220,11 @@ async function main() {
       editor.ws = original.ws;
       editor.props.readOnly = original.readOnly;
       editor.minder.setBase(original.base);
-      return { beforeAck, afterAck };
+      return { beforeAck, afterAck, savedRight: JSON.parse(sends[0].payload.caseContent).right };
     });
     assert.strictEqual(queuedSave.beforeAck, 0, '编辑版本未确认前不抢先保存');
     assert.deepStrictEqual(queuedSave.afterAck, ['save'], '编辑版本确认后再手动保存外观');
+    assert.strictEqual(queuedSave.savedRight, 1, '保存快照保留编辑补丁中的方向字段');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
       .find(button => button.textContent.trim() === '返回').click());

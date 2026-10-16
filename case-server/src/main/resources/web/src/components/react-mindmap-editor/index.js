@@ -31,6 +31,7 @@ import ExecutionFloatingPanels from './components/executionFloatingPanels';
 import ImageModal from './components/imageModal';
 import { pasteImageIntoNode } from './components/imageUpload';
 import MindMapScrollbars from './components/mindMapScrollbars';
+import { buildSaveContent } from './util/saveContent';
 import ThemeGroup from './outlook/ThemeGroup';
 import TemplateGroup from './outlook/TemplateGroup';
 import FontGroup from './outlook/FontGroup';
@@ -1034,7 +1035,7 @@ class KityminderEditor extends Component {
       return;
     }
     if (manual) this.manualSavePending = true;
-    this.ws.sendMessage(manual ? 'save' : 'autosave', { caseContent: JSON.stringify(this.minder.exportJson()), patch: '', caseVersion: '' });
+    this.ws.sendMessage(manual ? 'save' : 'autosave', { caseContent: buildSaveContent(this.minder, window.minderData), patch: '', caseVersion: '' });
   };
 
   handleEditAck = () => {

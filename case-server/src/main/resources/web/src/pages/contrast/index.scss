@@ -62,19 +62,22 @@
     flex: 0 0 330px;
     width: 330px;
   }
-  .comparison-filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 8px; }
-  .comparison-filters .ant-btn {
+  .comparison-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+  .comparison-legend .ant-btn {
     height: 30px;
     padding: 0 8px;
     border: 1px solid #d9e1ec;
     border-radius: 7px;
-    color: #4e5969;
+    color: #334155;
+    box-shadow: none;
   }
-  .comparison-filters .ant-btn:hover,
-  .comparison-filters .ant-btn:focus { color: #2563eb; border-color: #93b4ef; }
-  .comparison-filters .ant-btn.active { color: #2563eb; border-color: #93b4ef; background: #eef5ff; }
-  .comparison-legend { display: flex; flex-wrap: wrap; gap: 4px; }
-  .comparison-legend .ant-tag { margin: 0; padding: 1px 8px; border-radius: 5px; color: #334155; }
+  .comparison-legend .all { background: #f8fafc; }
+  .comparison-legend .added { background: #ddfade; }
+  .comparison-legend .deleted { background: #ffe7e7; }
+  .comparison-legend .changed { background: #d6f0ff; }
+  .comparison-legend .ant-btn:hover,
+  .comparison-legend .ant-btn:focus-visible { border-color: #3370ff; color: #1d4ed8; }
+  .comparison-legend .ant-btn.active { border-color: #3370ff; box-shadow: 0 0 0 2px #dbeafe; font-weight: 600; }
   .comparison-summary-toggle {
     display: flex;
     align-items: center;
