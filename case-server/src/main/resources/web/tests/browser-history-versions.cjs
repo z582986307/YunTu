@@ -303,12 +303,32 @@ async function main() {
     });
     assert.deepStrictEqual(firstCandidate, { value: '你', focused: true, caret: 1, editorOpen: true },
       `选中旧节点后首次选词不提交，光标停在新文字末尾：${JSON.stringify(firstCandidate)}`);
+    const candidateDefaultPrevented = await page.evaluate(() => {
+      const input = document.querySelector('.edit-input textarea');
+      input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+      const event = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Enter', keyCode: 13 });
+      input.dispatchEvent(event);
+      input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true }));
+      return event.defaultPrevented;
+    });
+    assert.strictEqual(candidateDefaultPrevented, false, '正在组词时的回车仍允许浏览器完成选词');
     await compose('好');
     assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '你好',
       '第二次选词接在首次选词之后');
     await page.waitForTimeout(100);
     await page.keyboard.press('Enter');
-    assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '你好',
+    assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '你好',
+      '输入法选词产生的回车不能提前结束编辑');
+    for (const character of ['世', '界', '啊']) {
+      await compose(character);
+      await page.evaluate(() => document.querySelector('.edit-input textarea')
+        .dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ' ', keyCode: 32 })));
+    }
+    assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '你好世界啊',
+      '连续五次选词始终追加文字');
+    await page.waitForTimeout(100);
+    await page.keyboard.press('Enter');
+    assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '你好世界啊',
       '选词后再按回车才提交旧节点的新文字');
     await page.evaluate(() => {
       const editor = window.__browserTestEditor;
@@ -325,11 +345,18 @@ async function main() {
     await page.waitForSelector('.edit-input:not(.hide) textarea');
     await compose('新');
     await compose('增');
-    assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '新增',
-      '新建节点连续两次选词也追加而不覆盖');
     await page.waitForTimeout(100);
     await page.keyboard.press('Enter');
-    assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '新增',
+    for (const character of ['节', '点', '啊']) {
+      await compose(character);
+      await page.evaluate(() => document.querySelector('.edit-input textarea')
+        .dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: ' ', keyCode: 32 })));
+    }
+    assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '新增节点啊',
+      '新建节点连续五次选词也追加而不覆盖');
+    await page.waitForTimeout(100);
+    await page.keyboard.press('Enter');
+    assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '新增节点啊',
       '新建节点回车后才写入文字');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))

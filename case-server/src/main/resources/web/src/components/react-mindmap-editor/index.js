@@ -493,8 +493,6 @@ class KityminderEditor extends Component {
       return;
     }
     if (this.props.readOnly) return;
-    if (!showEdit && e.keyCode === 13 &&
-        Date.now() - (this.lastCompositionEndAt || 0) < 80) return;
     const directTextKey = e.keyCode === 229 ||
       (typeof e.key === 'string' && e.key.length === 1 && !ctrlKey && !e.altKey);
     if (directTextKey && selectedNode && !showEdit && !typing && !hasModal &&
@@ -575,8 +573,14 @@ class KityminderEditor extends Component {
     }
     if (showEdit) {
       // 显示编辑框时，shift+回车=换行
-      if (e.keyCode === 13 && !e.shiftKey && !e.isComposing && !this.composing &&
-          Date.now() - (this.lastCompositionEndAt || 0) > 80) {
+      if (e.keyCode === 13 && !e.shiftKey && (e.isComposing || this.composing)) {
+        return;
+      }
+      if (e.keyCode === 13 && !e.shiftKey && this.pendingImeEnter) {
+        e.preventDefault();
+        return;
+      }
+      if (e.keyCode === 13 && !e.shiftKey) {
         e.preventDefault();
         selectedNode.setText(inputContent);
         // this.minder.setStatus('readonly');
@@ -657,7 +661,7 @@ class KityminderEditor extends Component {
       const inputContent = typeof replacementText === 'string' ? replacementText : node.getText();
       this.directReplace = typeof replacementText === 'string';
       this.showWhileTyping = showWhileTyping;
-      this.lastCompositionEndAt = 0;
+      this.pendingImeEnter = false;
       this.setState({ showEdit: true, inputContent }, () => {
         window.showEdit = true;
         editInput(node, inputNode);
@@ -1383,11 +1387,12 @@ class KityminderEditor extends Component {
                 rows={1}
                 value={inputContent || ''}
                 onChange={this.handleInputChange}
-                onCompositionStart={() => { this.composing = true; }}
+                onCompositionStart={() => { this.composing = true; this.pendingImeEnter = false; }}
                 onCompositionEnd={() => {
                   this.composing = false;
-                  this.lastCompositionEndAt = Date.now();
+                  this.pendingImeEnter = true;
                 }}
+                onKeyUp={() => { if (!this.composing) this.pendingImeEnter = false; }}
                 onBlur={() => {
                   // minder.setStatus('readonly');
                   if (selectedNode) selectedNode.render();
