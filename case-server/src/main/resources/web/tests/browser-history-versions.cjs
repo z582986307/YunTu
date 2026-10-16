@@ -244,6 +244,21 @@ async function main() {
     await page.keyboard.press('Enter');
     const newBranchText = await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText());
     assert.strictEqual(newBranchText, '222', '新建分支输入后不保留默认的分支主题文字');
+    await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      editor.minder.select(editor.minder.getSelectedNode(), true);
+      editor.handleKeyDown({ key: '9', keyCode: 57, target: document.body, preventDefault() {} });
+    });
+    await page.waitForSelector('.edit-input:not(.hide) textarea');
+    const selectedNodeTyping = await page.evaluate(() => {
+      const wrapper = document.querySelector('.edit-input');
+      return { text: wrapper.querySelector('textarea').value, opacity: Number(getComputedStyle(wrapper).opacity) };
+    });
+    assert.deepStrictEqual(selectedNodeTyping, { text: '9', opacity: 1 }, '单击选中节点后直接输入也实时显示文字');
+    await page.type('.edit-input textarea', '8');
+    await page.keyboard.press('Enter');
+    assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '98',
+      '单击选中节点后输入的新文字覆盖原文字');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
       .find(button => button.textContent.trim() === '返回').click());

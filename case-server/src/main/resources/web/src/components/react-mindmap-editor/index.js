@@ -500,7 +500,7 @@ class KityminderEditor extends Component {
     if (directTextKey && selectedNode && !showEdit && !typing && !hasModal &&
         !hasDrawer && !window.search && !window.tagInput && !this.state.isLock) {
       if (e.keyCode !== 229) e.preventDefault();
-      this.handleShowInput(e.keyCode === 229 ? '' : e.key);
+      this.handleShowInput(e.keyCode === 229 ? '' : e.key, true);
       return;
     }
     // comm + s 保存
