@@ -674,17 +674,6 @@ class KityminderEditor extends Component {
   handleInputChange = e => {
     this.setState({ inputContent: e.target.value });
   };
-  commitInputText = value => {
-    const node = this.state.selectedNode || this.minder.getSelectedNode();
-    if (!node) return;
-    node.setText(value);
-    node.render();
-    this.minder.layout()._interactChange();
-    this.minder.fire('contentchange');
-    this.directReplace = false;
-    window.showEdit = false;
-    this.setState({ showEdit: false, inputContent: null });
-  };
   handleNotePreview = e => {
     if (e) {
       this.setState(
@@ -1398,15 +1387,6 @@ class KityminderEditor extends Component {
                 onCompositionEnd={() => {
                   this.composing = false;
                   this.lastCompositionEndAt = Date.now();
-                  if (this.directReplace) {
-                    const input = this.inputNode.querySelector('textarea');
-                    if (input.value) this.commitInputText(input.value);
-                    else {
-                      this.directReplace = false;
-                      window.showEdit = false;
-                      this.setState({ showEdit: false, inputContent: null });
-                    }
-                  }
                 }}
                 onBlur={() => {
                   // minder.setStatus('readonly');
