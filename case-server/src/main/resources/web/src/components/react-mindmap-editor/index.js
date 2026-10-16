@@ -408,7 +408,7 @@ class KityminderEditor extends Component {
               ) > -1
             ) {
               minder.execCommand(command, '分支主题');
-              setTimeout(() => this.handleShowInput(''), 300);
+              setTimeout(() => this.handleShowInput('', true), 300);
             } else {
               minder.execCommand(command);
             }
@@ -553,12 +553,12 @@ class KityminderEditor extends Component {
           ) {
             e.preventDefault();
             this.minder.execCommand('AppendSiblingNode', '分支主题');
-            setTimeout(() => this.handleShowInput(''), 300);
+            setTimeout(() => this.handleShowInput('', true), 300);
           }
           if (e.keyCode === 9) {
             e.preventDefault();
             this.minder.execCommand('AppendChildNode', '分支主题');
-            setTimeout(() => this.handleShowInput(''), 300);
+            setTimeout(() => this.handleShowInput('', true), 300);
           }
         }
         if (e.keyCode === 8 && this.state.selectedImage && !this.state.isLock) {
@@ -650,12 +650,13 @@ class KityminderEditor extends Component {
     return patches;
   };
 
-  handleShowInput = replacementText => {
+  handleShowInput = (replacementText, showWhileTyping = false) => {
     const { minder, inputNode } = this;
     if (minder.getSelectedNode() && minder.getStatus() !== 'readonly') {
       const node = minder.getSelectedNode();
       const inputContent = typeof replacementText === 'string' ? replacementText : node.getText();
       this.directReplace = typeof replacementText === 'string';
+      this.showWhileTyping = showWhileTyping;
       this.lastCompositionEndAt = 0;
       this.setState({ showEdit: true, inputContent }, () => {
         window.showEdit = true;
@@ -1385,7 +1386,7 @@ class KityminderEditor extends Component {
           )}
           {this.minder && (
             <div
-              className={`edit-input${showEdit ? '' : ' hide'}${this.directReplace ? ' direct-replace' : ''}`}
+              className={`edit-input${showEdit ? '' : ' hide'}${this.directReplace && !this.showWhileTyping ? ' direct-replace' : ''}`}
               ref={inputNode => (this.inputNode = inputNode)}
             >
               <Input.TextArea

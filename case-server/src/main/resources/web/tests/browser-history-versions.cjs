@@ -233,7 +233,14 @@ async function main() {
       editor.handleKeyDown({ keyCode: 9, target: document.body, preventDefault() {} });
     });
     await page.waitForSelector('.edit-input:not(.hide) textarea');
-    await page.type('.edit-input textarea', '222');
+    await page.type('.edit-input textarea', '2');
+    const typingDisplay = await page.evaluate(() => {
+      const wrapper = document.querySelector('.edit-input');
+      const textarea = wrapper.querySelector('textarea');
+      return { text: textarea.value, opacity: Number(getComputedStyle(wrapper).opacity) };
+    });
+    assert.deepStrictEqual(typingDisplay, { text: '2', opacity: 1 }, '新建分支输入时立即显示正在输入的文字');
+    await page.type('.edit-input textarea', '22');
     await page.keyboard.press('Enter');
     const newBranchText = await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText());
     assert.strictEqual(newBranchText, '222', '新建分支输入后不保留默认的分支主题文字');
