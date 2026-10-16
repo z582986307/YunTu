@@ -64,11 +64,7 @@ class SeeResult extends React.Component {
       <React.Fragment>
         <Headers light />
         <div className="history-navigation">
-          <Button type="link" icon="arrow-left" onClick={() => {
-            const { caseId } = this.props.match.params;
-            if (caseId) this.props.history.push(`/history/${caseId}`);
-            else this.props.history.goBack();
-          }}>
+          <Button type="link" icon="arrow-left" onClick={() => this.props.history.push('/case/caseList/1')}>
             返回
           </Button>
         </div>

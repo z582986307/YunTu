@@ -225,10 +225,22 @@ async function main() {
     assert.strictEqual(queuedSave.beforeAck, 0, '编辑版本未确认前不抢先保存');
     assert.deepStrictEqual(queuedSave.afterAck, ['save'], '编辑版本确认后再手动保存外观');
     assert.strictEqual(queuedSave.savedRight, 1, '保存快照保留编辑补丁中的方向字段');
+    await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      editor.props.readOnly = false;
+      editor.setState({ showEdit: false, inputContent: null });
+      editor.minder.select(editor.minder.getRoot(), true);
+      editor.handleKeyDown({ keyCode: 9, target: document.body, preventDefault() {} });
+    });
+    await page.waitForSelector('.edit-input:not(.hide) textarea');
+    await page.type('.edit-input textarea', '222');
+    await page.keyboard.press('Enter');
+    const newBranchText = await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText());
+    assert.strictEqual(newBranchText, '222', '新建分支输入后不保留默认的分支主题文字');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
       .find(button => button.textContent.trim() === '返回').click());
-    await page.waitForFunction(() => location.pathname === '/history/7');
+    await page.waitForFunction(() => location.pathname === '/case/caseList/1');
     console.log('browser-history-versions: pass');
   } finally {
     if (browser) await browser.close();

@@ -90,9 +90,12 @@ test('历史版本页返回按钮回到上一页', () => {
   expect(history.goBack).toHaveBeenCalledTimes(1);
 });
 
-test('版本对比页返回到该用例的历史版本', () => {
+test.each([
+  { caseId: '7', backupId: '12' },
+  { caseId1: '11', caseId2: '12' },
+])('版本对比页返回用例列表，不依赖来源页面', params => {
   const history = { push: jest.fn(), goBack: jest.fn() };
-  const page = new Compare({ match: { params: { caseId: '7', backupId: '12' } }, history });
+  const page = new Compare({ match: { params }, history });
   const findBack = node => {
     if (!node || typeof node !== 'object') return null;
     if (node.props && node.props.children === '返回') return node;
@@ -102,7 +105,8 @@ test('版本对比页返回到该用例的历史版本', () => {
   const button = findBack(page.render());
   expect(button).not.toBeNull();
   button.props.onClick();
-  expect(history.push).toHaveBeenCalledWith('/history/7');
+  expect(history.push).toHaveBeenCalledWith('/case/caseList/1');
+  expect(history.goBack).not.toHaveBeenCalled();
 });
 
 test('对比页筛选只改变脑图展示，不改原始对比结果', async () => {

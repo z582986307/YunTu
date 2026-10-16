@@ -408,7 +408,7 @@ class KityminderEditor extends Component {
               ) > -1
             ) {
               minder.execCommand(command, '分支主题');
-              setTimeout(this.handleShowInput, 300);
+              setTimeout(() => this.handleShowInput(''), 300);
             } else {
               minder.execCommand(command);
             }
@@ -553,12 +553,12 @@ class KityminderEditor extends Component {
           ) {
             e.preventDefault();
             this.minder.execCommand('AppendSiblingNode', '分支主题');
-            setTimeout(this.handleShowInput, 300);
+            setTimeout(() => this.handleShowInput(''), 300);
           }
           if (e.keyCode === 9) {
             e.preventDefault();
             this.minder.execCommand('AppendChildNode', '分支主题');
-            setTimeout(this.handleShowInput, 300);
+            setTimeout(() => this.handleShowInput(''), 300);
           }
         }
         if (e.keyCode === 8 && this.state.selectedImage && !this.state.isLock) {
