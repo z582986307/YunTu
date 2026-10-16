@@ -45,6 +45,9 @@ export default function editInput(selectedNode, inputNode, positionOnly) {
       const lineCount = Math.max(1, textarea.value.split('\n').length);
       textarea.style.fontSize = `${box.fontSize}px`;
       textarea.style.lineHeight = `${box.height / lineCount}px`;
+      textarea.style.transform = `translateY(-${Math.max(2, Math.round(box.fontSize * 0.18))}px)`;
+      const svgText = shape && shape.querySelector('text');
+      if (svgText) textarea.style.fontFamily = getComputedStyle(svgText).fontFamily;
     }
   } else {
     return { x: box.left + box.width / 2, y: box.top };

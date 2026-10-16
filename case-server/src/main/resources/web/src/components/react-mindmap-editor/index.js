@@ -662,8 +662,9 @@ class KityminderEditor extends Component {
         window.showEdit = true;
         editInput(node, inputNode);
         const input = inputNode.querySelector('textarea');
-        input.style.backgroundColor = node.getData('background') ||
+        inputNode.style.backgroundColor = node.getData('background') ||
           node.getStyle(node.isSelected() ? 'selected-background' : 'background') || '#fff';
+        input.style.backgroundColor = 'transparent';
         input.style.color = node.getStyle('color');
         input.focus();
         input.setSelectionRange(input.value.length, input.value.length);

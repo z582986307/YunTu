@@ -97,9 +97,13 @@ async function main() {
       return { x: rect.x, y: rect.y };
     });
     const beforePan = await textPosition();
-    await page.mouse.move(250, 350);
+    const panStart = await page.$eval('.kityminder-core-container', canvas => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: rect.left + rect.width * 0.7, y: rect.top + Math.min(80, rect.height / 2) };
+    });
+    await page.mouse.move(panStart.x, panStart.y);
     await page.mouse.down({ button: 'middle' });
-    await page.mouse.move(330, 380, { steps: 8 });
+    await page.mouse.move(panStart.x + 80, panStart.y + 30, { steps: 8 });
     await page.mouse.up({ button: 'middle' });
     const afterPan = await textPosition();
     assert(Math.abs(afterPan.x - beforePan.x) > 20, '中键拖动移动脑图');
@@ -255,6 +259,24 @@ async function main() {
       return { text: wrapper.querySelector('textarea').value, opacity: Number(getComputedStyle(wrapper).opacity) };
     });
     assert.deepStrictEqual(selectedNodeTyping, { text: '9', opacity: 1 }, '单击选中节点后直接输入也实时显示文字');
+    const typingAlignment = await page.evaluate(() => {
+      const node = window.__browserTestEditor.minder.getSelectedNode();
+      const shape = node.getRenderer('TextRenderer').getRenderShape().node;
+      const textarea = document.querySelector('.edit-input textarea');
+      const wrapper = textarea.parentElement;
+      return {
+        textRise: wrapper.getBoundingClientRect().top - textarea.getBoundingClientRect().top,
+        sameFont: getComputedStyle(textarea).fontFamily === getComputedStyle(shape.querySelector('text')).fontFamily,
+        wrapperBackground: getComputedStyle(wrapper).backgroundColor,
+        inputBackground: getComputedStyle(textarea).backgroundColor,
+      };
+    });
+    assert(typingAlignment.textRise >= 2 && typingAlignment.textRise <= 4,
+      `输入文字应位于节点文字基线：${JSON.stringify(typingAlignment)}`);
+    assert(typingAlignment.sameFont, '输入文字与节点文字使用同一字体');
+    assert.notStrictEqual(typingAlignment.wrapperBackground, 'rgba(0, 0, 0, 0)', '输入框遮住旧节点文字');
+    assert.strictEqual(typingAlignment.inputBackground, 'rgba(0, 0, 0, 0)', '上移文字不遮挡节点边框');
+    await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/输入时位置.png') });
     await page.type('.edit-input textarea', '8');
     await page.keyboard.press('Enter');
     assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '98',
