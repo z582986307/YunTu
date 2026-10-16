@@ -358,6 +358,43 @@ async function main() {
     await page.keyboard.press('Enter');
     assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '新增节点啊',
       '新建节点回车后才写入文字');
+    await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      editor.minder.select(editor.minder.getRoot(), true);
+    });
+    await page.evaluate(() => window.__browserTestEditor.handleKeyDown({
+      key: 'Process', keyCode: 229, target: document.body, preventDefault() {},
+    }));
+    await page.waitForSelector('.edit-input:not(.hide) textarea');
+    const imeClient = await page.target().createCDPSession();
+    for (const character of ['你', '好', '世', '界', '啊']) {
+      await imeClient.send('Input.imeSetComposition', { text: 'n', selectionStart: 1, selectionEnd: 1 });
+      await imeClient.send('Input.insertText', { text: character });
+      const snapshot = await page.evaluate(() => {
+        const editor = window.__browserTestEditor;
+        const input = document.querySelector('.edit-input:not(.hide) textarea');
+        return { edit: editor.state.showEdit, value: input && input.value,
+          focused: document.activeElement === input, nodeText: editor.minder.getSelectedNode().getText() };
+      });
+      assert.strictEqual(snapshot.value, '你好世界啊'.slice(0, '你好世界啊'.indexOf(character) + 1),
+        `浏览器原生组词连续输入 ${character}`);
+      assert(snapshot.edit && snapshot.focused, `连续输入 ${character} 后仍保持编辑框焦点`);
+    }
+    await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      editor.setState({ showEdit: false, inputContent: null });
+      editor.minder.select(editor.minder.getRoot(), true);
+      editor.handleKeyDown({ keyCode: 9, target: document.body, preventDefault() {} });
+    });
+    await page.waitForTimeout(50);
+    await page.evaluate(() => window.__browserTestEditor.handleKeyDown({
+      key: '先', keyCode: 0, target: document.body, preventDefault() {},
+    }));
+    assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '先',
+      '新建节点首次输入显示正在输入的文字');
+    await page.waitForTimeout(350);
+    assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '先',
+      '新建节点延迟打开输入框不能覆盖已输入的文字');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
       .find(button => button.textContent.trim() === '返回').click());

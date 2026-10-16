@@ -408,7 +408,7 @@ class KityminderEditor extends Component {
               ) > -1
             ) {
               minder.execCommand(command, '分支主题');
-              setTimeout(() => this.handleShowInput('', true), 300);
+              this.scheduleNewNodeInput();
             } else {
               minder.execCommand(command);
             }
@@ -551,12 +551,12 @@ class KityminderEditor extends Component {
           ) {
             e.preventDefault();
             this.minder.execCommand('AppendSiblingNode', '分支主题');
-            setTimeout(() => this.handleShowInput('', true), 300);
+            this.scheduleNewNodeInput();
           }
           if (e.keyCode === 9) {
             e.preventDefault();
             this.minder.execCommand('AppendChildNode', '分支主题');
-            setTimeout(() => this.handleShowInput('', true), 300);
+            this.scheduleNewNodeInput();
           }
         }
         if (e.keyCode === 8 && this.state.selectedImage && !this.state.isLock) {
@@ -652,6 +652,15 @@ class KityminderEditor extends Component {
       }
     }
     return patches;
+  };
+
+  scheduleNewNodeInput = () => {
+    const node = this.minder.getSelectedNode();
+    setTimeout(() => {
+      if (!this.state.showEdit && this.minder.getSelectedNode() === node) {
+        this.handleShowInput('', true);
+      }
+    }, 300);
   };
 
   handleShowInput = (replacementText, showWhileTyping = false) => {
