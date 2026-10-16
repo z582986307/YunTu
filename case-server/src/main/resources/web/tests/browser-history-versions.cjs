@@ -24,8 +24,8 @@ async function main() {
       response.end(json({
         content: { base: 2, template: 'right', root: { data: { text: '版本比较结果' }, children: [
           { data: { id: 'branch', text: '分支' }, children: [
-            { data: { id: 'leaf-a', text: '叶子 A' }, children: [] },
-            { data: { id: 'leaf-b', text: '叶子 B' }, children: [] },
+            { data: { id: 'leaf-a', text: '叶子 A', background: '#ddfade' }, children: [] },
+            { data: { id: 'leaf-b', text: '叶子 B', background: '#d6f0ff' }, children: [] },
           ] },
         ] } },
         backupinfo: [{ user: 'tester', time: '2026-10-12T09:00:00' }, { user: 'tester', time: '2026-10-13T09:00:00' }],
@@ -86,6 +86,8 @@ async function main() {
       .find(button => button.textContent.includes('与当前版本对比')).click());
     await page.waitForFunction(() => location.pathname.includes('/currentContrast/'));
     await page.waitForFunction(() => document.body.textContent.includes('版本比较结果'));
+    await page.waitForSelector('.comparison-filters button');
+    assert(await page.evaluate(() => document.body.textContent.includes('当前版本')), '当前版本标识可见');
     assert(await page.evaluate(() => Array.from(document.querySelectorAll('svg text'))
       .some(node => node.textContent.includes('版本比较结果') && node.childElementCount === 0)));
     const textPosition = () => page.evaluate(() => {
@@ -101,6 +103,19 @@ async function main() {
     await page.mouse.up({ button: 'middle' });
     const afterPan = await textPosition();
     assert(Math.abs(afterPan.x - beforePan.x) > 20, '中键拖动移动脑图');
+    await page.click('.comparison-filters button:nth-child(2)');
+    await page.waitForFunction(() => document.querySelector('.comparison-filters button.active').textContent.replace(/\s/g, '') === '新增');
+    await page.waitForFunction(() => !Array.from(document.querySelectorAll('svg text'))
+      .some(node => node.textContent.includes('叶子 B')));
+    assert(await page.evaluate(() => Array.from(document.querySelectorAll('svg text'))
+      .some(node => node.textContent.includes('叶子 A'))), '新增筛选保留匹配节点');
+    await page.click('.comparison-filters button:nth-child(1)');
+    await page.waitForFunction(() => Array.from(document.querySelectorAll('svg text'))
+      .some(node => node.textContent.includes('叶子 B')));
+    await page.evaluate(() => document.querySelector('.comparison-summary-toggle button').click());
+    assert.strictEqual(await page.$('.box_title'), null, '折叠后隐藏版本和图例');
+    await page.evaluate(() => document.querySelector('.comparison-summary-toggle button').click());
+    await page.waitForSelector('.box_title');
     const editorFound = await page.evaluate(() => {
       const wrapper = document.querySelector('.edit-input');
       const fiberKey = Object.keys(wrapper).find(key => key.startsWith('__reactInternalInstance'));
@@ -169,12 +184,24 @@ async function main() {
       const classic = { size: minder.getStyle('main-font-size'), padding: minder.getStyle('main-padding') };
       minder.setTheme('ink-black');
       const ink = { size: minder.getStyle('main-font-size'), padding: minder.getStyle('main-padding'),
-        text: minder.getStyle('main-color'), line: minder.getStyle('connect-color') };
+        text: minder.getStyle('main-color'), line: minder.getStyle('connect-color'),
+        border: minder.getStyle('main-stroke') };
+      const branch = minder.getRoot().getChildren()[0];
+      branch.collapse();
+      minder.layout();
+      const expander = branch.expanderRenderer.expander;
+      ink.expander = {
+        outline: expander.outline.node.getAttribute('stroke'),
+        count: expander.count.node.getAttribute('fill'),
+      };
       return { baseline, classic, ink };
     });
     assert.deepStrictEqual(themeMetrics.classic, themeMetrics.baseline, '普通主题不改变节点字体和边距');
     assert.strictEqual(themeMetrics.ink.text, '#111827');
     assert.strictEqual(themeMetrics.ink.line, '#111827');
+    assert.strictEqual(themeMetrics.ink.border, '#cbd5e1', '经典黑节点边框改为浅灰');
+    assert.deepStrictEqual(themeMetrics.ink.expander, { outline: '#111827', count: '#111827' },
+      '经典黑的折叠按钮与末级节点数量使用黑色');
     const queuedSave = await page.evaluate(() => {
       const editor = window.__browserTestEditor;
       const sends = [];

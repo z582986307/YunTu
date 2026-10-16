@@ -104,3 +104,19 @@ test('版本对比页返回到该用例的历史版本', () => {
   button.props.onClick();
   expect(history.push).toHaveBeenCalledWith('/history/7');
 });
+
+test('对比页筛选只改变脑图展示，不改原始对比结果', async () => {
+  const content = { root: { data: { id: 'root' }, children: [
+    { data: { id: 'added', background: '#ddfade' }, children: [] },
+    { data: { id: 'plain' }, children: [] },
+  ] } };
+  const page = new Compare({ match: { params: { caseId: '7' } } });
+  page.setState = (update, done) => { Object.assign(page.state, update); if (done) done(); };
+  page.rawContent = content;
+  page.editorNode = { setEditerData: jest.fn(() => Promise.resolve()) };
+  page.handleFilterChange('added');
+  await Promise.resolve();
+  expect(page.editorNode.setEditerData.mock.calls[0][0].root.children.map(node => node.data.id)).toEqual(['added']);
+  expect(content.root.children).toHaveLength(2);
+  expect(request).not.toHaveBeenCalled();
+});

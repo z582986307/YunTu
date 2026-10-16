@@ -5564,6 +5564,10 @@
               return;
             }
             this.setVisible(true);
+            var black = node && node.getMinder().getTheme() == 'ink-black';
+            this.outline.stroke(black ? '#111827' : '#78a9ef').fill(black ? '#ffffff' : '#f4f8ff');
+            this.sign.stroke(black ? '#111827' : '#3370ff');
+            this.count.fill(black ? '#111827' : '#2563eb');
             if (state == STATE_COLLAPSE && node) {
               if (node._collapsedLeafCount == null) {
                 var leaves = 0;
@@ -10025,9 +10029,9 @@
       blackTheme['root-color'] = '#111827';
       blackTheme['main-color'] = '#111827';
       blackTheme['sub-color'] = '#111827';
-      blackTheme['root-stroke'] = '#1f2937';
-      blackTheme['main-stroke'] = '#1f2937';
-      blackTheme['sub-stroke'] = '#1f2937';
+      blackTheme['root-stroke'] = '#cbd5e1';
+      blackTheme['main-stroke'] = '#cbd5e1';
+      blackTheme['sub-stroke'] = '#cbd5e1';
       blackTheme['connect-color'] = '#111827';
       blackTheme['root-background'] = '#f8fafc';
       blackTheme['main-background'] = '#ffffff';

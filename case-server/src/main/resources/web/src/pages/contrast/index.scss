@@ -12,7 +12,7 @@
   }
 }
 .history-navigation {
-  padding: 12px 24px 0;
+  padding: 8px 16px 0;
   .ant-btn-link {
     color: #3370ff;
     padding-left: 0;
@@ -24,12 +24,14 @@
   }
 }
 .historyBox {
-  padding: 0 20px 20px;
+  padding: 0 16px 8px;
   background: white;
   .box_title {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 5px;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 0;
   }
   .title_history,
   .title_color {
@@ -40,13 +42,50 @@
     > .ant-card-body {
       padding: 0;
     }
+    .ant-card-head-title { padding: 6px 0; }
+  }
+  .title_history { flex: 1 1 auto; min-width: 0; }
+  .comparison-versions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .comparison-versions .ant-card { border: 1px solid #e5e9f0; border-radius: 8px; }
+  .comparison-versions .ant-card-body { padding: 8px 12px; line-height: 1.6; }
+  .comparison-current-version { background: #eef5ff; border-color: #b8d3f5 !important; }
+  .comparison-current-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: #dbeafe;
+    color: #2563eb;
+    font-size: 12px;
   }
   .title_color {
-    width: 300px;
-    span {
-      margin-bottom: 15px;
-      padding: 3px 20px;
-      color: rgba(0, 0, 0, 0.65);
-    }
+    flex: 0 0 330px;
+    width: 330px;
   }
+  .comparison-filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 8px; }
+  .comparison-filters .ant-btn {
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid #d9e1ec;
+    border-radius: 7px;
+    color: #4e5969;
+  }
+  .comparison-filters .ant-btn:hover,
+  .comparison-filters .ant-btn:focus { color: #2563eb; border-color: #93b4ef; }
+  .comparison-filters .ant-btn.active { color: #2563eb; border-color: #93b4ef; background: #eef5ff; }
+  .comparison-legend { display: flex; flex-wrap: wrap; gap: 4px; }
+  .comparison-legend .ant-tag { margin: 0; padding: 1px 8px; border-radius: 5px; color: #334155; }
+  .comparison-summary-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    min-height: 32px;
+    color: #64748b;
+  }
+  .comparison-summary-toggle .ant-btn-link { height: 30px; padding: 0 2px; color: #3370ff; }
+}
+@media (max-width: 900px) {
+  .historyBox .box_title { flex-wrap: wrap; }
+  .historyBox .title_color { flex: 1 1 100%; width: 100%; }
 }

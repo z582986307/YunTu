@@ -33,6 +33,11 @@ public class WebController {
         return "index";
     }
 
+    @RequestMapping("/caseManager/currentContrast/*/*")
+    public String currentContrast(){
+        return "index";
+    }
+
     @RequestMapping("/case/caseList/1")
     public String index(HttpServletRequest request){
         return "index";
