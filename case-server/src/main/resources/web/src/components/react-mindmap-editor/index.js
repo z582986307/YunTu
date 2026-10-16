@@ -1401,7 +1401,9 @@ class KityminderEditor extends Component {
                   this.composing = false;
                   this.pendingImeEnter = true;
                 }}
-                onKeyUp={() => { if (!this.composing) this.pendingImeEnter = false; }}
+                onKeyUp={event => {
+                  if (!this.composing && event.keyCode !== 13) this.pendingImeEnter = false;
+                }}
                 onBlur={() => {
                   // minder.setStatus('readonly');
                   if (selectedNode) selectedNode.render();

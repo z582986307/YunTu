@@ -303,6 +303,18 @@ async function main() {
     });
     assert.deepStrictEqual(firstCandidate, { value: '你', focused: true, caret: 1, editorOpen: true },
       `选中旧节点后首次选词不提交，光标停在新文字末尾：${JSON.stringify(firstCandidate)}`);
+    const sogouEnterOrder = await page.evaluate(() => {
+      const input = document.querySelector('.edit-input:not(.hide) textarea');
+      input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter', keyCode: 13 }));
+      const candidateEnter = new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true, key: 'Enter', keyCode: 13,
+      });
+      input.dispatchEvent(candidateEnter);
+      return { open: window.__browserTestEditor.state.showEdit,
+        value: input.value, prevented: candidateEnter.defaultPrevented };
+    });
+    assert.deepStrictEqual(sogouEnterOrder, { open: true, value: '你', prevented: true },
+      `输入法选词结束后的 Enter 抬起不能让随后补发的 Enter 提交节点：${JSON.stringify(sogouEnterOrder)}`);
     const candidateDefaultPrevented = await page.evaluate(() => {
       const input = document.querySelector('.edit-input textarea');
       input.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
@@ -344,6 +356,16 @@ async function main() {
     });
     await page.waitForSelector('.edit-input:not(.hide) textarea');
     await compose('新');
+    const newNodeCandidateOrder = await page.evaluate(() => {
+      const input = document.querySelector('.edit-input:not(.hide) textarea');
+      input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'Enter', keyCode: 13 }));
+      input.dispatchEvent(new KeyboardEvent('keydown', {
+        bubbles: true, cancelable: true, key: 'Enter', keyCode: 13,
+      }));
+      return { open: window.__browserTestEditor.state.showEdit, value: input.value };
+    });
+    assert.deepStrictEqual(newNodeCandidateOrder, { open: true, value: '新' },
+      `新建节点选词后的补发 Enter 也不能提前提交：${JSON.stringify(newNodeCandidateOrder)}`);
     await compose('增');
     await page.waitForTimeout(100);
     await page.keyboard.press('Enter');
@@ -369,6 +391,7 @@ async function main() {
     const imeClient = await page.target().createCDPSession();
     for (const character of ['你', '好', '世', '界', '啊']) {
       await imeClient.send('Input.imeSetComposition', { text: 'n', selectionStart: 1, selectionEnd: 1 });
+      await imeClient.send('Input.imeSetComposition', { text: 'ni', selectionStart: 2, selectionEnd: 2 });
       await imeClient.send('Input.insertText', { text: character });
       const snapshot = await page.evaluate(() => {
         const editor = window.__browserTestEditor;
