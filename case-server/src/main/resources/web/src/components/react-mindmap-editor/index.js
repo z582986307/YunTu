@@ -167,10 +167,12 @@ class KityminderEditor extends Component {
     minder.on('selectionchange', () => {
       const node = minder.getSelectedNode();
       if (!readOnly) {
-        const { selectedNode, showEdit, inputContent } = this.state;
+        const { selectedNode, showEdit } = this.state;
         // 如果被选中节点之前处于编辑状态，变更后节点失去焦点
         // 则先更新节点内容，然后隐藏编辑框、清空编辑框字段
         if (showEdit) {
+          const input = this.inputNode && this.inputNode.querySelector('textarea');
+          const inputContent = input ? input.value : this.state.inputContent;
           if (selectedNode.getText() !== inputContent) {
             selectedNode.setText(inputContent);
             selectedNode.render();
@@ -479,7 +481,7 @@ class KityminderEditor extends Component {
     const ctrlKey = e.metaKey || e.ctrlKey;
     const hasModal =
       document.getElementsByClassName('yuntu-modal').length > 0;
-    const { showEdit, selectedNode, inputContent } = this.state;
+    const { showEdit, selectedNode } = this.state;
     const hasDrawer =
       document.getElementsByClassName('yuntu-note-drawer').length > 0;
     const isRefresh = ctrlKey && e.keyCode === 82;
@@ -582,6 +584,8 @@ class KityminderEditor extends Component {
       }
       if (e.keyCode === 13 && !e.shiftKey) {
         e.preventDefault();
+        const input = this.inputNode && this.inputNode.querySelector('textarea');
+        const inputContent = input ? input.value : this.state.inputContent;
         selectedNode.setText(inputContent);
         // this.minder.setStatus('readonly');
         selectedNode.render();
@@ -673,8 +677,9 @@ class KityminderEditor extends Component {
       this.pendingImeEnter = false;
       this.setState({ showEdit: true, inputContent }, () => {
         window.showEdit = true;
-        editInput(node, inputNode);
         const input = inputNode.querySelector('textarea');
+        input.value = inputContent;
+        editInput(node, inputNode);
         inputNode.style.backgroundColor = node.getData('background') ||
           node.getStyle(node.isSelected() ? 'selected-background' : 'background') || '#fff';
         input.style.backgroundColor = 'transparent';
@@ -683,9 +688,6 @@ class KityminderEditor extends Component {
         input.setSelectionRange(input.value.length, input.value.length);
       });
     }
-  };
-  handleInputChange = e => {
-    this.setState({ inputContent: e.target.value });
   };
   handleNotePreview = e => {
     if (e) {
@@ -1063,7 +1065,6 @@ class KityminderEditor extends Component {
       minder,
       noteContent,
       showEdit,
-      inputContent,
       noteNode,
       activeTab,
       showToolBar,
@@ -1392,10 +1393,10 @@ class KityminderEditor extends Component {
               className={`edit-input${showEdit ? '' : ' hide'}${this.directReplace && !this.showWhileTyping ? ' direct-replace' : ''}`}
               ref={inputNode => (this.inputNode = inputNode)}
             >
-              <Input.TextArea
+              <textarea
+                className="ant-input"
                 rows={1}
-                value={inputContent || ''}
-                onChange={this.handleInputChange}
+                defaultValue=""
                 onCompositionStart={() => { this.composing = true; this.pendingImeEnter = false; }}
                 onCompositionEnd={() => {
                   this.composing = false;

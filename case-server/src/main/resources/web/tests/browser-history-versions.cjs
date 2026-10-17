@@ -418,6 +418,38 @@ async function main() {
     await page.waitForTimeout(350);
     assert.strictEqual(await page.$eval('.edit-input:not(.hide) textarea', input => input.value), '先',
       '新建节点延迟打开输入框不能覆盖已输入的文字');
+    const newNodeAfterRerender = await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      const input = document.querySelector('.edit-input:not(.hide) textarea');
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      nativeValueSetter.call(input, '先后');
+      editor.forceUpdate();
+      return new Promise(resolve => requestAnimationFrame(() => resolve(input.value)));
+    });
+    assert.strictEqual(newNodeAfterRerender, '先后',
+      '新建节点输入法已写入输入框但尚未发出 change 时，页面重绘不能清掉后续文字');
+    await page.keyboard.press('Enter');
+    assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '先后',
+      '新建节点提交时应读取输入框中的完整文字');
+    await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      editor.minder.select(editor.minder.getRoot(), true);
+      editor.handleKeyDown({ key: '你', keyCode: 0, target: document.body, preventDefault() {} });
+    });
+    await page.waitForSelector('.edit-input:not(.hide) textarea');
+    const existingNodeAfterRerender = await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      const input = document.querySelector('.edit-input:not(.hide) textarea');
+      const nativeValueSetter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set;
+      nativeValueSetter.call(input, '你好');
+      editor.forceUpdate();
+      return new Promise(resolve => requestAnimationFrame(() => resolve(input.value)));
+    });
+    assert.strictEqual(existingNodeAfterRerender, '你好',
+      '已有节点连续输入也不能被页面重绘写回旧文字');
+    await page.keyboard.press('Enter');
+    assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '你好',
+      '已有节点提交时应读取输入框中的完整文字');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
       .find(button => button.textContent.trim() === '返回').click());
