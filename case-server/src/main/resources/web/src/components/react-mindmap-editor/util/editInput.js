@@ -42,7 +42,7 @@ export default function editInput(selectedNode, inputNode, positionOnly) {
     $previewer.style.height = Math.max(1, Math.ceil(box.height)) + 'px';
     const textarea = $previewer.querySelector('textarea');
     if (textarea && box.fontSize) {
-      const lineCount = Math.max(1, textarea.value.split('\n').length);
+      const lineCount = Math.max(1, shape.querySelectorAll('text').length);
       textarea.style.fontSize = `${box.fontSize}px`;
       textarea.style.lineHeight = `${box.height / lineCount}px`;
       textarea.style.transform = `translateY(-${Math.max(2, Math.round(box.fontSize * 0.18))}px)`;

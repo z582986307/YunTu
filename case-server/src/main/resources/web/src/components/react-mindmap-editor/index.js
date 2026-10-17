@@ -173,6 +173,7 @@ class KityminderEditor extends Component {
         if (showEdit) {
           const input = this.inputNode && this.inputNode.querySelector('textarea');
           const inputContent = input ? input.value : this.state.inputContent;
+          delete selectedNode._editingText;
           if (selectedNode.getText() !== inputContent) {
             selectedNode.setText(inputContent);
             selectedNode.render();
@@ -586,6 +587,7 @@ class KityminderEditor extends Component {
         e.preventDefault();
         const input = this.inputNode && this.inputNode.querySelector('textarea');
         const inputContent = input ? input.value : this.state.inputContent;
+        delete selectedNode._editingText;
         selectedNode.setText(inputContent);
         // this.minder.setStatus('readonly');
         selectedNode.render();
@@ -887,6 +889,13 @@ class KityminderEditor extends Component {
       return;
     }
     this.ws.sendMessage('lock', { message: checked ? 'lock' : 'unlock' });
+  };
+  handleEditInput = event => {
+    const node = this.state.selectedNode;
+    if (!node || !this.state.showEdit) return;
+    node._editingText = event.target.value;
+    node.render();
+    editInput(node, this.inputNode);
   };
   handleExecutionChange = (field, nodes, value, apply) => {
     const patches = buildNodeDataPatches(nodes.filter(Boolean), field, value);
@@ -1397,6 +1406,7 @@ class KityminderEditor extends Component {
                 className="ant-input"
                 rows={1}
                 defaultValue=""
+                onInput={this.handleEditInput}
                 onCompositionStart={() => { this.composing = true; this.pendingImeEnter = false; }}
                 onCompositionEnd={() => {
                   this.composing = false;

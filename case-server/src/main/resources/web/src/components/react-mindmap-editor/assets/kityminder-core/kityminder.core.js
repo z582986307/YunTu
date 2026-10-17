@@ -8011,11 +8011,47 @@
           function getDataOrStyle(name) {
             return node.getData(name) || node.getStyle(name);
           }
-          var nodeText = node.getText();
-          var textArr = nodeText ? nodeText.split('\n') : [' '];
+          var nodeText = node._editingText === undefined ? node.getText() : node._editingText;
           var lineHeight = node.getStyle('line-height');
           var fontSize = getDataOrStyle('font-size');
           var fontFamily = getDataOrStyle('font-family') || 'default';
+          // Keep the data unchanged: wrapping is only a visual layout decision.
+          var textArr;
+          if (!nodeText || (nodeText.indexOf('\n') < 0 && nodeText.length * fontSize <= 320)) {
+            textArr = [nodeText || ' '];
+          } else {
+            var wrapKey = nodeText + '/' + fontSize + '/' + fontFamily + '/' + getDataOrStyle('font-weight');
+            if (node._wrappedTextCache && node._wrappedTextCache.key === wrapKey) {
+              textArr = node._wrappedTextCache.lines;
+            } else {
+              var sourceLines = nodeText ? nodeText.split('\n') : [' '];
+              textArr = [];
+              var context = null;
+              for (var lineIndex = 0; lineIndex < sourceLines.length; lineIndex++) {
+                var source = sourceLines[lineIndex];
+                if (source.length * fontSize <= 320) {
+                  textArr.push(source || ' ');
+                  continue;
+                }
+                if (!context) {
+                  context = document.createElement('canvas').getContext('2d');
+                  context.font = (getDataOrStyle('font-weight') || 'normal') + ' ' + fontSize + 'px ' +
+                    (fontFamily === 'default' ? 'sans-serif' : fontFamily);
+                }
+                var segment = '';
+                for (var character of Array.from(source)) {
+                  if (segment && context.measureText(segment + character).width > 320) {
+                    textArr.push(segment);
+                    segment = character;
+                  } else {
+                    segment += character;
+                  }
+                }
+                textArr.push(segment || ' ');
+              }
+              node._wrappedTextCache = { key: wrapKey, lines: textArr };
+            }
+          }
           var height = lineHeight * fontSize * textArr.length - (lineHeight - 1) * fontSize;
           var yStart = -height / 2;
           var Browser = kity.Browser;
@@ -8072,7 +8108,7 @@
           }
           this.setTextStyle(node, textGroup);
           var textHash =
-            node.getText() +
+            nodeText +
             ['font-size', 'font-name', 'font-weight', 'font-style', 'text-decoration']
               .map(getDataOrStyle)
               .join('/');

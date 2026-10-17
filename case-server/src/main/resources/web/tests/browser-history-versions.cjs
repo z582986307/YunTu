@@ -450,6 +450,53 @@ async function main() {
     await page.keyboard.press('Enter');
     assert.strictEqual(await page.evaluate(() => window.__browserTestEditor.minder.getSelectedNode().getText()), '你好',
       '已有节点提交时应读取输入框中的完整文字');
+    const liveTextLayout = await page.evaluate(async () => {
+      const editor = window.__browserTestEditor;
+      const node = editor.minder.getSelectedNode();
+      const original = node.getText();
+      editor.handleShowInput();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const input = document.querySelector('.edit-input:not(.hide) textarea');
+      const wrapper = document.querySelector('.edit-input:not(.hide)');
+      const measure = () => ({ width: wrapper.getBoundingClientRect().width,
+        height: wrapper.getBoundingClientRect().height,
+        logicalWidth: node.getRenderer('TextRenderer').getRenderShape().node.getBBox().width,
+        lines: node.getRenderer('TextRenderer').getRenderShape().node.querySelectorAll('text').length,
+        stored: node.getText() });
+      const initial = measure();
+      input.value = '客户管理节点文字';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const short = measure();
+      const longText = '客户管理需要验证所有页面字段显示与录入规则'.repeat(4);
+      input.value = longText;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      return { initial, short, long: measure(), original, longText };
+    });
+    assert(liveTextLayout.short.width > liveTextLayout.initial.width,
+      `单行输入时节点向右延长：${JSON.stringify(liveTextLayout)}`);
+    assert(liveTextLayout.long.height > liveTextLayout.short.height && liveTextLayout.long.lines > 1,
+      `超过一行后输入中的节点换行增高：${JSON.stringify(liveTextLayout)}`);
+    assert(liveTextLayout.long.logicalWidth < 340,
+      `长文字达到上限后不再无限向右延长：${JSON.stringify(liveTextLayout)}`);
+    assert.strictEqual(liveTextLayout.long.stored, liveTextLayout.original,
+      '输入中不应提前修改节点原文或触发保存');
+    await page.keyboard.press('Enter');
+    const committedTextLayout = await page.evaluate(() => {
+      const node = window.__browserTestEditor.minder.getSelectedNode();
+      return { text: node.getText(),
+        lines: node.getRenderer('TextRenderer').getRenderShape().node.querySelectorAll('text').length,
+        width: node.getRenderer('TextRenderer').getRenderShape().node.getBBox().width };
+    });
+    assert.strictEqual(committedTextLayout.text, liveTextLayout.longText,
+      '确认后保留原始长文字，不写入自动换行符');
+    assert(committedTextLayout.lines > 1 && committedTextLayout.width < 340,
+      `输入后保持多行节点效果：${JSON.stringify(committedTextLayout)}`);
+    assert.strictEqual(committedTextLayout.lines, liveTextLayout.long.lines,
+      '输入中与确认后的换行行数应一致');
+    assert(Math.abs(committedTextLayout.width - liveTextLayout.long.logicalWidth) < 1,
+      '输入中与确认后的文字宽度应一致');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
       .find(button => button.textContent.trim() === '返回').click());
