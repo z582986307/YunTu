@@ -497,6 +497,62 @@ async function main() {
       '输入中与确认后的换行行数应一致');
     assert(Math.abs(committedTextLayout.width - liveTextLayout.long.logicalWidth) < 1,
       '输入中与确认后的文字宽度应一致');
+    const overlappingEdit = await page.evaluate(async () => {
+      const editor = window.__browserTestEditor;
+      let upper, lower;
+      const createdNodes = [];
+      editor.minder.getRoot().traverse(node => {
+        if (node !== editor.minder.getRoot() &&
+            !['branch', 'leaf-a', 'leaf-b'].includes(node.getData('id'))) createdNodes.push(node);
+      });
+      createdNodes.sort((a, b) => a.getRenderContainer().node.getBoundingClientRect().top -
+        b.getRenderContainer().node.getBoundingClientRect().top);
+      upper = createdNodes[0];
+      const upperBefore = upper.getRenderContainer().node.getBoundingClientRect();
+      let nearestDistance = Infinity;
+      createdNodes.forEach(node => {
+        if (node === upper) return;
+        const rect = node.getRenderContainer().node.getBoundingClientRect();
+        const distance = rect.top - upperBefore.top;
+        if (rect.height && distance > 0 && distance < nearestDistance) {
+          nearestDistance = distance;
+          lower = node;
+        }
+      });
+      editor.minder.select([upper], true);
+      const shape = upper.getRenderContainer().node;
+      const lowerShape = lower.getRenderContainer().node;
+      const originalNext = shape.nextSibling;
+      const lowerBefore = lowerShape.getBoundingClientRect().top;
+      editor.handleShowInput();
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const input = document.querySelector('.edit-input:not(.hide) textarea');
+      input.value = '正在输入的长节点内容需要临时显示在下方节点上层'.repeat(9);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const upperRect = shape.getBoundingClientRect();
+      const lowerRect = lowerShape.getBoundingClientRect();
+      return { intersects: upperRect.bottom > lowerRect.top && upperRect.top < lowerRect.bottom,
+        lowerUnmoved: Math.abs(lowerRect.top - lowerBefore) < 1,
+        before: { x: upperBefore.x, top: upperBefore.top, height: upperBefore.height },
+        upperRect: { x: upperRect.x, right: upperRect.right, top: upperRect.top, bottom: upperRect.bottom },
+        lowerRect: { x: lowerRect.x, right: lowerRect.right, top: lowerRect.top, bottom: lowerRect.bottom },
+        upperInFront: shape.compareDocumentPosition(lowerShape) & Node.DOCUMENT_POSITION_PRECEDING,
+        originalNextId: originalNext && originalNext.id,
+        upperId: shape.id };
+    });
+    assert(overlappingEdit.intersects && overlappingEdit.lowerUnmoved,
+      `输入期间应保持下方节点原位并发生临时重叠：${JSON.stringify(overlappingEdit)}`);
+    assert(overlappingEdit.upperInFront,
+      `编辑节点应临时绘制在下方节点前面：${JSON.stringify(overlappingEdit)}`);
+    await page.keyboard.press('Enter');
+    const afterOverlappingEdit = await page.evaluate(() => {
+      const editor = window.__browserTestEditor;
+      const shape = editor.minder.getSelectedNode().getRenderContainer().node;
+      return { nextId: shape.nextSibling && shape.nextSibling.id };
+    });
+    assert.strictEqual(afterOverlappingEdit.nextId, overlappingEdit.originalNextId,
+      '确认后应恢复原绘制顺序，再由现有布局计算节点位置');
     await page.screenshot({ path: path.join(root, '运行日志/历史版本浏览器验证/版本对比.png') });
     await page.evaluate(() => Array.from(document.querySelectorAll('.history-navigation button'))
       .find(button => button.textContent.trim() === '返回').click());

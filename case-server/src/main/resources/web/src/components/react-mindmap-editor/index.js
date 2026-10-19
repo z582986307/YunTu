@@ -122,6 +122,7 @@ class KityminderEditor extends Component {
   }
   componentWillUnmount() {
     clearTimeout(this.autoSaveTimer);
+    this.restoreEditingNodeLayer();
     window.removeEventListener('mousemove', this.handleImageResizeMove);
     window.removeEventListener('mouseup', this.handleImageResizeEnd);
     window.showEdit = false;
@@ -180,6 +181,7 @@ class KityminderEditor extends Component {
             this.minder.layout()._interactChange();
             this.minder.fire('contentchange');
           }
+          this.restoreEditingNodeLayer();
           this.setState({ showEdit: false, inputContent: null });
           window.showEdit = false;
         }
@@ -592,6 +594,7 @@ class KityminderEditor extends Component {
         // this.minder.setStatus('readonly');
         selectedNode.render();
         this.minder.layout()._interactChange();
+        this.restoreEditingNodeLayer();
         // this.minder.setStatus('normal');
         this.minder.fire('contentchange');
         this.setState({ showEdit: false, inputContent: null });
@@ -679,6 +682,7 @@ class KityminderEditor extends Component {
       this.pendingImeEnter = false;
       this.setState({ showEdit: true, inputContent }, () => {
         window.showEdit = true;
+        this.raiseEditingNodeLayer(node);
         const input = inputNode.querySelector('textarea');
         input.value = inputContent;
         editInput(node, inputNode);
@@ -889,6 +893,23 @@ class KityminderEditor extends Component {
       return;
     }
     this.ws.sendMessage('lock', { message: checked ? 'lock' : 'unlock' });
+  };
+  raiseEditingNodeLayer = node => {
+    this.restoreEditingNodeLayer();
+    const element = node.getRenderContainer().node;
+    const parent = element.parentNode;
+    if (!parent) return;
+    this.editingNodeLayer = { element, parent, nextSibling: element.nextSibling };
+    parent.appendChild(element);
+  };
+  restoreEditingNodeLayer = () => {
+    const layer = this.editingNodeLayer;
+    if (!layer) return;
+    this.editingNodeLayer = null;
+    if (layer.element.parentNode !== layer.parent) return;
+    const next = layer.nextSibling && layer.nextSibling.parentNode === layer.parent ?
+      layer.nextSibling : null;
+    layer.parent.insertBefore(layer.element, next);
   };
   handleEditInput = event => {
     const node = this.state.selectedNode;
