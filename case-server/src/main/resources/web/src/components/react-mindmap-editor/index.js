@@ -117,6 +117,7 @@ class KityminderEditor extends Component {
   }
   componentDidMount() {
     document.addEventListener('mousedown', this.handleContextDismiss);
+    document.addEventListener('mousedown', this.handlePendingCompositionPointerDown, true);
     this.initKeyBoardEvent();
     this.initData = initData;
   }
@@ -132,11 +133,17 @@ class KityminderEditor extends Component {
     document.removeEventListener('keydown', this.handleKeyDown);
     clipboardRuntime.removeListener();
     document.removeEventListener('mousedown', this.handleContextDismiss);
+    document.removeEventListener('mousedown', this.handlePendingCompositionPointerDown, true);
     // this.heartCheck.reset();
   }
   handleContextDismiss = event => {
     if (this.contextMenuRef && !this.contextMenuRef.contains(event.target)) {
       this.setState({ contextMenu: null });
+    }
+  };
+  handlePendingCompositionPointerDown = event => {
+    if (this.composing && this.inputNode && !this.inputNode.contains(event.target)) {
+      this.discardPendingComposition = true;
     }
   };
   getAllData = () => {
@@ -174,13 +181,20 @@ class KityminderEditor extends Component {
         if (showEdit) {
           const input = this.inputNode && this.inputNode.querySelector('textarea');
           const inputContent = input ? input.value : this.state.inputContent;
+          const discardComposition = this.composing || this.discardPendingComposition;
           delete selectedNode._editingText;
-          if (selectedNode.getText() !== inputContent) {
+          if (discardComposition) {
+            selectedNode.render();
+            this.minder.layout()._interactChange();
+          } else if (selectedNode.getText() !== inputContent) {
             selectedNode.setText(inputContent);
             selectedNode.render();
             this.minder.layout()._interactChange();
             this.minder.fire('contentchange');
           }
+          this.composing = false;
+          this.pendingImeEnter = false;
+          this.discardPendingComposition = false;
           this.restoreEditingNodeLayer();
           this.setState({ showEdit: false, inputContent: null });
           window.showEdit = false;
@@ -191,7 +205,7 @@ class KityminderEditor extends Component {
         selectedNode: node,
         noteContent: null,
         selectedImage: state.selectedImage && state.selectedImage.node === node ? state.selectedImage : null,
-      }));
+      }), this.prepareNodeInput);
     });
     minder.on('dblclick', e => {
       const image = this.getImageEventTarget(e);
@@ -488,7 +502,10 @@ class KityminderEditor extends Component {
     const hasDrawer =
       document.getElementsByClassName('yuntu-note-drawer').length > 0;
     const isRefresh = ctrlKey && e.keyCode === 82;
-    const typing = e.target && e.target.closest && e.target.closest('input, textarea, [contenteditable="true"]');
+    const preparedInput = !showEdit && this.inputNode &&
+      e.target === this.inputNode.querySelector('textarea');
+    const typing = !preparedInput && e.target && e.target.closest &&
+      e.target.closest('input, textarea, [contenteditable="true"]');
     if (ctrlKey && (e.keyCode === 90 || e.keyCode === 89) &&
         !hasModal && !hasDrawer && !showEdit && !typing &&
         !window.search && !window.tagInput && this.groupNode) {
@@ -500,7 +517,7 @@ class KityminderEditor extends Component {
     if (this.props.readOnly) return;
     const directTextKey = e.keyCode === 229 ||
       (typeof e.key === 'string' && e.key.length === 1 && !ctrlKey && !e.altKey);
-    if (directTextKey && selectedNode && !showEdit && !typing && !hasModal &&
+    if (directTextKey && selectedNode && !showEdit && !typing && !preparedInput && !hasModal &&
         !hasDrawer && !window.search && !window.tagInput && !this.state.isLock) {
       if (e.keyCode !== 229) e.preventDefault();
       this.handleShowInput(e.keyCode === 229 ? '' : e.key, true);
@@ -597,7 +614,7 @@ class KityminderEditor extends Component {
         this.restoreEditingNodeLayer();
         // this.minder.setStatus('normal');
         this.minder.fire('contentchange');
-        this.setState({ showEdit: false, inputContent: null });
+        this.setState({ showEdit: false, inputContent: null }, this.prepareNodeInput);
         window.showEdit = false;
       }
     }
@@ -672,7 +689,7 @@ class KityminderEditor extends Component {
     }, 300);
   };
 
-  handleShowInput = (replacementText, showWhileTyping = false) => {
+  handleShowInput = (replacementText, showWhileTyping = false, preserveExistingInput = false) => {
     const { minder, inputNode } = this;
     if (minder.getSelectedNode() && minder.getStatus() !== 'readonly') {
       const node = minder.getSelectedNode();
@@ -684,14 +701,18 @@ class KityminderEditor extends Component {
         window.showEdit = true;
         this.raiseEditingNodeLayer(node);
         const input = inputNode.querySelector('textarea');
-        input.value = inputContent;
+        if (!preserveExistingInput) input.value = inputContent;
+        if (preserveExistingInput) {
+          node._editingText = input.value;
+          node.render();
+        }
         editInput(node, inputNode);
         inputNode.style.backgroundColor = node.getData('background') ||
           node.getStyle(node.isSelected() ? 'selected-background' : 'background') || '#fff';
         input.style.backgroundColor = 'transparent';
         input.style.color = node.getStyle('color');
-        input.focus();
-        input.setSelectionRange(input.value.length, input.value.length);
+        if (document.activeElement !== input) input.focus({ preventScroll: true });
+        if (!preserveExistingInput) input.setSelectionRange(input.value.length, input.value.length);
       });
     }
   };
@@ -894,6 +915,14 @@ class KityminderEditor extends Component {
     }
     this.ws.sendMessage('lock', { message: checked ? 'lock' : 'unlock' });
   };
+  prepareNodeInput = () => {
+    if (this.props.readOnly || this.state.showEdit || !this.state.selectedNode || !this.inputNode ||
+        document.getElementsByClassName('yuntu-modal').length) return;
+    const input = this.inputNode.querySelector('textarea');
+    if (!input) return;
+    input.value = '';
+    input.focus({ preventScroll: true });
+  };
   raiseEditingNodeLayer = node => {
     this.restoreEditingNodeLayer();
     const element = node.getRenderContainer().node;
@@ -913,7 +942,11 @@ class KityminderEditor extends Component {
   };
   handleEditInput = event => {
     const node = this.state.selectedNode;
-    if (!node || !this.state.showEdit) return;
+    if (!node) return;
+    if (!this.state.showEdit) {
+      this.handleShowInput(event.target.value, true, true);
+      return;
+    }
     node._editingText = event.target.value;
     node.render();
     editInput(node, this.inputNode);
@@ -1425,6 +1458,7 @@ class KityminderEditor extends Component {
             >
               <textarea
                 className="ant-input"
+                tabIndex={showEdit ? 0 : -1}
                 rows={1}
                 defaultValue=""
                 onInput={this.handleEditInput}
@@ -1437,6 +1471,7 @@ class KityminderEditor extends Component {
                   if (!this.composing && event.keyCode !== 13) this.pendingImeEnter = false;
                 }}
                 onBlur={() => {
+                  if (!this.state.showEdit || this.composing || this.discardPendingComposition) return;
                   // minder.setStatus('readonly');
                   if (selectedNode) selectedNode.render();
                   minder.layout()._interactChange();
