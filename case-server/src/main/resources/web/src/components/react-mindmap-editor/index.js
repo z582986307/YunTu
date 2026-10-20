@@ -181,7 +181,8 @@ class KityminderEditor extends Component {
         if (showEdit) {
           const input = this.inputNode && this.inputNode.querySelector('textarea');
           const inputContent = input ? input.value : this.state.inputContent;
-          const discardComposition = this.composing || this.discardPendingComposition;
+          const discardComposition = this.composing || this.discardPendingComposition ||
+            (this.lastCompositionText === inputContent && !this.imeConfirmedByKey);
           delete selectedNode._editingText;
           if (discardComposition) {
             selectedNode.render();
@@ -195,6 +196,8 @@ class KityminderEditor extends Component {
           this.composing = false;
           this.pendingImeEnter = false;
           this.discardPendingComposition = false;
+          this.lastCompositionText = null;
+          this.imeConfirmedByKey = false;
           this.restoreEditingNodeLayer();
           this.setState({ showEdit: false, inputContent: null });
           window.showEdit = false;
@@ -596,9 +599,11 @@ class KityminderEditor extends Component {
     if (showEdit) {
       // 显示编辑框时，shift+回车=换行
       if (e.keyCode === 13 && !e.shiftKey && (e.isComposing || this.composing)) {
+        this.imeConfirmedByKey = true;
         return;
       }
       if (e.keyCode === 13 && !e.shiftKey && this.pendingImeEnter) {
+        this.imeConfirmedByKey = true;
         e.preventDefault();
         return;
       }
@@ -1462,7 +1467,15 @@ class KityminderEditor extends Component {
                 rows={1}
                 defaultValue=""
                 onInput={this.handleEditInput}
-                onCompositionStart={() => { this.composing = true; this.pendingImeEnter = false; }}
+                onCompositionStart={() => {
+                  this.composing = true;
+                  this.pendingImeEnter = false;
+                  this.lastCompositionText = null;
+                  this.imeConfirmedByKey = false;
+                }}
+                onCompositionUpdate={event => {
+                  if (/^[a-z' ]+$/i.test(event.data)) this.lastCompositionText = event.data;
+                }}
                 onCompositionEnd={() => {
                   this.composing = false;
                   this.pendingImeEnter = true;

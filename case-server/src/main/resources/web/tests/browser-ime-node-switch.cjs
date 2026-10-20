@@ -82,6 +82,18 @@ async function main() {
       '未确认选词就点击其他节点，不能把拼音保存到节点A');
 
     await clickNode('a');
+    await ime.send('Input.imeSetComposition', { text: 'bbb', selectionStart: 3, selectionEnd: 3 });
+    await page.evaluate(() => {
+      const input = document.querySelector('.edit-input textarea');
+      input.dispatchEvent(new CompositionEvent('compositionend', { data: 'bbb', bubbles: true }));
+    });
+    await page.waitForFunction(() => !window.editor.composing);
+    await clickNode('b');
+    await page.waitForFunction(() => !window.editor.state.showEdit);
+    assert.strictEqual(await page.evaluate(() => window.editor.minder.getRoot().children[0].getText()), '原节点A',
+      '输入法在点击前结束组词但没有确认选词时，原节点仍不能被原始拼音覆盖');
+
+    await clickNode('a');
     await ime.send('Input.imeSetComposition', { text: 'ni', selectionStart: 2, selectionEnd: 2 });
     await ime.send('Input.insertText', { text: '你' });
     await clickNode('b');
