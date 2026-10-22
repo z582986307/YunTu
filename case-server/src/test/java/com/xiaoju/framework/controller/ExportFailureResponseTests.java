@@ -1,6 +1,7 @@
 package com.xiaoju.framework.controller;
 
 import com.xiaoju.framework.service.FileService;
+import com.xiaoju.framework.entity.response.cases.ExportXmindResp;
 import org.junit.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -13,6 +14,25 @@ import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 public class ExportFailureResponseTests {
+    @Test
+    public void exportedFilenameKeepsOriginalSpacesInsteadOfPlusSigns() throws Exception {
+        FileService files = mock(FileService.class);
+        ExportXmindResp export = new ExportXmindResp();
+        export.setFileName("原始 用例 .xmind");
+        export.setData(new byte[] { 1 });
+        when(files.exportXmindFile(eq(2209L), any())).thenReturn(export);
+        UploadController controller = new UploadController();
+        ReflectionTestUtils.setField(controller, "fileService", files);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        controller.exportXmind(2209L, new MockHttpServletRequest(), response);
+
+        assertEquals(200, response.getStatus());
+        assertTrue(response.getHeader("Content-Disposition").contains("%20"));
+        assertFalse(response.getHeader("Content-Disposition").contains("+"));
+        assertFalse(response.getHeader("Content-Disposition").contains("%20.xmind"));
+    }
+
     @Test
     public void missingImageShowsReadableErrorInsteadOfBlankDownloadTab() throws Exception {
         FileService files = mock(FileService.class);

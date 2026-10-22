@@ -341,13 +341,19 @@ public class FileServiceImpl implements FileService {
         String theme = content == null ? null : content.getString("theme");
         String fill = "#ffffff";
         String color = "#334e70";
-        String border = "#000000";
+        String rootBorder = "#78a9ef";
+        String mainBorder = "#b8d3f5";
+        String subBorder = "#d7e5f5";
+        String lineColor = "#78a9ef";
         String rootFill = "#e7f1ff";
         String mainFill = "#f4f8ff";
         if ("ink-black".equals(theme)) {
             color = "#111827";
-            border = "#9ca3af";
-        } else if (theme != null) {
+            rootBorder = mainBorder = subBorder = "#cbd5e1";
+            lineColor = "#111827";
+            rootFill = "#f8fafc";
+            mainFill = "#ffffff";
+        } else if (theme != null && !"byte-blue".equals(theme)) {
             String accent = null;
             if (theme.contains("red")) accent = "#d94b58";
             else if (theme.contains("green")) accent = "#4c9c75";
@@ -356,7 +362,8 @@ public class FileServiceImpl implements FileService {
             else if (theme.contains("soil")) accent = "#b18b4b";
             else if (theme.contains("blue")) accent = "#4c8dff";
             if (accent != null) {
-                border = accent;
+                rootBorder = mainBorder = subBorder = accent;
+                lineColor = accent;
                 color = "#243b5a";
                 rootFill = accent;
                 mainFill = "#f6f8fc";
@@ -368,17 +375,21 @@ public class FileServiceImpl implements FileService {
                 .addNamespace("fo", "http://www.w3.org/1999/XSL/Format")
                 .addNamespace("svg", "http://www.w3.org/2000/svg");
         Element automatic = styles.addElement("automatic-styles");
-        writeTopicStyle(automatic, XMIND_STYLE_ROOT, "ink-black".equals(theme) ? fill : rootFill, "ink-black".equals(theme) ? color : "#1f3b64", "18pt", border);
-        writeTopicStyle(automatic, XMIND_STYLE_MAIN, "ink-black".equals(theme) ? fill : mainFill, "ink-black".equals(theme) ? color : "#274568", "14pt", border);
-        writeTopicStyle(automatic, XMIND_STYLE_SUB, fill, color, "12pt", border);
+        String rootColor = "ink-black".equals(theme) ? color : "#1f3b64";
+        String mainColor = "ink-black".equals(theme) ? color : "#274568";
+        writeTopicStyle(automatic, XMIND_STYLE_ROOT, rootFill, rootColor, "18pt", rootBorder, lineColor);
+        writeTopicStyle(automatic, XMIND_STYLE_MAIN, mainFill, mainColor, "14pt", mainBorder, lineColor);
+        writeTopicStyle(automatic, XMIND_STYLE_SUB, fill, color, "12pt", subBorder, lineColor);
         if (content != null && content.getJSONObject(ROOT) != null) {
-            writeNodeStyles(automatic, content.getJSONObject(ROOT));
+            writeNodeStyles(automatic, content.getJSONObject(ROOT), 0,
+                    new String[]{rootFill, mainFill, fill}, new String[]{rootColor, mainColor, color},
+                    new String[]{rootBorder, mainBorder, subBorder}, lineColor);
         }
         writeXml(path + "/styles.xml", document);
     }
 
-    private void writeTopicStyle(Element styles, String id, String fill, String color, String fontSize, String border) {
-        styles.addElement("style")
+    private Element writeTopicStyle(Element styles, String id, String fill, String color, String fontSize, String border, String lineColor) {
+        return styles.addElement("style")
                 .addAttribute("id", id)
                 .addAttribute("type", "topic")
                 .addElement("topic-properties")
@@ -386,14 +397,14 @@ public class FileServiceImpl implements FileService {
                 .addAttribute("border-line-color", border)
                 .addAttribute("border-line-width", "1pt")
                 .addAttribute("line-class", "org.xmind.branchConnection.roundedElbow")
-                .addAttribute("line-color", "#000000")
+                .addAttribute("line-color", lineColor)
                 .addAttribute("line-width", "1pt")
                 .addAttribute("shape-class", "org.xmind.topicShape.roundedRect")
                 .addAttribute("fo:color", color)
                 .addAttribute("fo:font-size", fontSize);
     }
 
-    private void writeNodeStyles(Element styles, JSONObject node) {
+    private void writeNodeStyles(Element styles, JSONObject node, int depth, String[] fills, String[] colors, String[] borders, String lineColor) {
         JSONObject data = node.getJSONObject(DATA);
         if (data != null && data.getString("id") != null) {
             String color = data.getString("color");
@@ -403,10 +414,9 @@ public class FileServiceImpl implements FileService {
             String weight = data.getString("font-weight");
             String fontStyle = data.getString("font-style");
             if (color != null || fontSize != null || family != null || background != null || weight != null || fontStyle != null) {
-                Element properties = styles.addElement("style")
-                        .addAttribute("id", "yuntu-node-" + data.getString("id"))
-                        .addAttribute("type", "topic")
-                        .addElement("topic-properties");
+                int level = Math.min(depth, 2);
+                Element properties = writeTopicStyle(styles, "yuntu-node-" + data.getString("id"),
+                        fills[level], colors[level], new String[]{"18pt", "14pt", "12pt"}[level], borders[level], lineColor);
                 if (color != null) properties.addAttribute("fo:color", color);
                 if (fontSize != null) properties.addAttribute("fo:font-size", fontSize + "pt");
                 if (family != null) properties.addAttribute("fo:font-family", family);
@@ -416,7 +426,7 @@ public class FileServiceImpl implements FileService {
             }
         }
         JSONArray children = node.getJSONArray("children");
-        if (children != null) for (Object child : children) writeNodeStyles(styles, (JSONObject) child);
+        if (children != null) for (Object child : children) writeNodeStyles(styles, (JSONObject) child, depth + 1, fills, colors, borders, lineColor);
     }
 
     private void writeManifestXml(String path){

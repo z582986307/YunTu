@@ -1334,6 +1334,7 @@ class KityminderEditor extends Component {
               if (!this.minder) {
                 this.minder = new window.kityminder.Minder({
                   renderTo: input,
+                  disableNodeDrag: progressShow,
                 });
                 this.centerNode = input;
                 this.initOnEvent(this.minder);

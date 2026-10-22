@@ -141,7 +141,9 @@ public class UploadController {
      */
     private void populateHttpResponse(HttpServletResponse response, byte[] data, String fileName) throws Exception {
         response.setContentType("application/octet-stream; charset=UTF-8");
-        response.setHeader("Content-Disposition", "attachment; fileName=" + fileName + ";filename*=utf-8''" + URLEncoder.encode(fileName, "UTF-8"));
+        String downloadName = fileName.replaceFirst("\\s+\\.xmind$", ".xmind").trim();
+        response.setHeader("Content-Disposition", "attachment; filename=\"export.xmind\"; filename*=UTF-8''"
+                + URLEncoder.encode(downloadName, "UTF-8").replace("+", "%20"));
         response.addHeader("Content-Length", "" + data.length);
         response.setStatus(StatusCode.SERVICE_RUN_SUCCESS.getStatus());
         IOUtils.write(data, response.getOutputStream());

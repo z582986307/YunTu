@@ -45,8 +45,8 @@ public class XmindExportStyleTests {
         assertEquals("xmap-styles", styles.getRootElement().getName());
         assertEquals("urn:xmind:xmap:xmlns:style:2.0", styles.getRootElement().getNamespaceURI());
         assertEquals("urn:xmind:xmap:xmlns:style:2.0", styles.getRootElement().element("automatic-styles").getNamespaceURI());
-        assertTrue(styles.asXML().contains("line-color=\"#000000\""));
-        assertTrue(styles.asXML().contains("border-line-color=\"#000000\""));
+        assertTrue(styles.asXML().contains("line-color=\"#78a9ef\""));
+        assertTrue(styles.asXML().contains("border-line-color=\"#d7e5f5\""));
         assertTrue(styles.asXML().contains("line-class=\"org.xmind.branchConnection.roundedElbow\""));
         assertTrue(styles.asXML().contains("shape-class=\"org.xmind.topicShape.roundedRect\""));
         assertTrue(manifest.asXML().contains("styles.xml"));
@@ -68,6 +68,31 @@ public class XmindExportStyleTests {
         assertTrue(styles.asXML().contains("#ff0000"));
         assertTrue(styles.asXML().contains("24pt"));
         assertTrue(styles.asXML().contains("Arial"));
+    }
+
+    @Test
+    public void exportsSkyBlueThemeWithMatchingLinesAndBorders() throws Exception {
+        File output = new File("target/xmind-export-sky-blue-test");
+        assertTrue(output.isDirectory() || output.mkdirs());
+        TestCase testCase = new TestCase();
+        testCase.setCaseContent("{\"theme\":\"byte-blue\",\"root\":{\"data\":{\"id\":\"root\",\"text\":\"中心\"},\"children\":[{\"data\":{\"id\":\"child\",\"text\":\"分支\",\"color\":\"#ff0000\"},\"children\":[]}]}}");
+        FileServiceImpl service = new FileServiceImpl();
+        ReflectionTestUtils.invokeMethod(service, "writeStylesXml", testCase, output.getPath());
+        Document styles = new SAXReader().read(new File(output, "styles.xml"));
+        String xml = styles.asXML();
+        assertTrue(xml.contains("line-color=\"#78a9ef\""));
+        assertTrue(xml.contains("border-line-color=\"#78a9ef\""));
+        assertTrue(xml.contains("border-line-color=\"#b8d3f5\""));
+        assertTrue(xml.contains("border-line-color=\"#d7e5f5\""));
+        assertFalse(xml.contains("line-color=\"#000000\""));
+        org.dom4j.Element custom = null;
+        for (Object item : styles.getRootElement().element("automatic-styles").elements("style")) {
+            org.dom4j.Element style = (org.dom4j.Element) item;
+            if ("yuntu-node-child".equals(style.attributeValue("id"))) custom = style.element("topic-properties");
+        }
+        assertNotNull(custom);
+        assertEquals("#78a9ef", custom.attributeValue("line-color"));
+        assertEquals("#b8d3f5", custom.attributeValue("border-line-color"));
     }
 
     @Test

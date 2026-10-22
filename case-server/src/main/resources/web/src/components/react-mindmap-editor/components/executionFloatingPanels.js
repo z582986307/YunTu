@@ -47,6 +47,7 @@ class ExecutionFloatingPanels extends Component {
   componentWillUnmount() {
     this.props.minder.off('import', this.rebuildExecutionIndex)
     this.props.minder.off('progressiveimportdone', this.rebuildExecutionIndex)
+    this.props.minder.off('layoutallfinish', this.centerAfterFilter)
   }
   rebuildExecutionIndex = () =>
     this.setState({
@@ -95,6 +96,20 @@ class ExecutionFloatingPanels extends Component {
     this.props.onChange()
     message.success('备注已保存')
   }
+  centerAfterFilter = () => {
+    const { minder } = this.props
+    minder.off('layoutallfinish', this.centerAfterFilter)
+    const duration = minder.getOption('viewAnimationDuration')
+    minder.setOption('viewAnimationDuration', 0)
+    minder.execCommand('camera', minder.getRoot())
+    minder.setOption('viewAnimationDuration', duration)
+  }
+  layoutAndCenter = () => {
+    const { minder } = this.props
+    minder.off('layoutallfinish', this.centerAfterFilter)
+    minder.on('layoutallfinish', this.centerAfterFilter)
+    minder.layout(100)
+  }
   filter = value => {
     const { minder } = this.props
     const root = minder.getRoot()
@@ -102,7 +117,7 @@ class ExecutionFloatingPanels extends Component {
     const nodes = [...this.state.executionIndex.nodesByKey[key]]
     focusFilteredExecutionNodes(root, nodes)
     root.renderTree()
-    minder.layout(100)
+    this.layoutAndCenter()
     minder.select([], true)
     minder.fire('receiverfocus')
   }
@@ -111,7 +126,7 @@ class ExecutionFloatingPanels extends Component {
     const root = minder.getRoot()
     expandAllExecutionNodes(root)
     root.renderTree()
-    minder.layout(100)
+    this.layoutAndCenter()
     minder.select([], true)
     minder.fire('receiverfocus')
   }

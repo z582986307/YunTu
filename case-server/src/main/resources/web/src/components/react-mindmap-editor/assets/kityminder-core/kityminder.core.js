@@ -5382,6 +5382,7 @@
           events: {
             'normal.mousedown inputready.mousedown': function (e) {
               // 单选中根节点也不触发拖拽
+              if (this.getOption('disableNodeDrag')) return;
               if (e.originEvent.button) return;
               if (e.getTargetNode() && e.getTargetNode() != this.getRoot()) {
                 dragger.dragStart(e.getPosition());
@@ -5581,8 +5582,9 @@
               }
               this.count.setContent(node._collapsedLeafCount > 99 ? '...' : String(node._collapsedLeafCount));
               this.count.setVisible(true);
-              this.radius = 10;
-              this.outline.setRadius(10);
+              var fontSize = Number(node.getData('font-size') || node.getStyle('font-size')) || 12;
+              this.radius = Math.max(6, Math.min(10, Math.round(fontSize / 2)));
+              this.outline.setRadius(this.radius);
             } else {
               this.count.setVisible(false);
               this.radius = 6;
