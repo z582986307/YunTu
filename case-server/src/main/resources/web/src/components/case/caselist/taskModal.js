@@ -74,6 +74,18 @@ class TaskModal extends React.Component {
         choiseDate: [],
         resource: [],
       });
+      if (nextProps.visible && nextProps.record) {
+        const caseId = nextProps.record.id;
+        request(`${nextProps.doneApiPrefix}/record/suggestTitle`, {
+          method: 'GET', params: { caseId },
+        }).then(res => {
+          if (res.code === 200 && this.props.visible &&
+              this.props.record && this.props.record.id === caseId &&
+              !this.props.form.isFieldTouched('title')) {
+            this.props.form.setFieldsValue({ title: res.data });
+          }
+        }).catch(() => message.error('获取可用任务名称失败，请重试'));
+      }
     }
   }
 

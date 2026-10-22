@@ -62,6 +62,14 @@ public class RecordServiceImpl implements RecordService {
     private TestCaseMapper caseMapper;
 
     @Override
+    public String suggestTitle(Long caseId) {
+        TestCase sourceCase = caseMapper.selectOne(caseId);
+        if (sourceCase == null) throw new CaseServerException("用例不存在", StatusCode.NOT_FOUND_ENTITY);
+        return UniqueTitleResolver.nextAvailableNumbered(sourceCase.getTitle().trim(),
+                candidate -> recordMapper.countActiveByTitle(candidate, null) > 0);
+    }
+
+    @Override
     public PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize,
                                                               String keyword, String owner, String beginTime, String endTime) {
         if (productLineId == null || pageNum < 1 || pageSize < 1 || pageSize > 100) {
@@ -131,7 +139,7 @@ public class RecordServiceImpl implements RecordService {
         TestCase sourceCase = caseMapper.selectOne(req.getCaseId());
         if (sourceCase == null) throw new CaseServerException("用例不存在", StatusCode.NOT_FOUND_ENTITY);
         if (title.equals(sourceCase.getTitle().trim())) {
-            title = UniqueTitleResolver.nextAvailable(title,
+            title = UniqueTitleResolver.nextAvailableNumbered(title,
                     candidate -> recordMapper.countActiveByTitle(candidate, null) > 0);
         } else if (recordMapper.countActiveByTitle(title, null) > 0) {
             throw new CaseServerException("测试任务名称已存在，请修改后重试", StatusCode.INTERNAL_ERROR);

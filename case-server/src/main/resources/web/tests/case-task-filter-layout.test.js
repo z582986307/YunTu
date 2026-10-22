@@ -19,3 +19,11 @@ test('用例五项筛选常驻列表顶部，任务筛选清空日期不显示�
 test('字体颜色预设包含默认黑色', () => {
   expect(source('react-mindmap-editor/components/colorPicker.js')).toContain("'#000000'")
 })
+
+test('文字筛选框有内容时可清空，不触发自动查询', () => {
+  const filters = source('case/caselist/oefilter.js')
+  const tasks = source('case/caselist/taskList.js')
+  expect((filters.match(/allowClear/g) || []).length).toBeGreaterThanOrEqual(3)
+  expect(tasks).toContain('<Input.Search allowClear')
+  expect(tasks).toContain('onChange={event => this.changeDraft({ keyword: event.target.value })}')
+})

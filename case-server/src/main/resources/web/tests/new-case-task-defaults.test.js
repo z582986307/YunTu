@@ -8,7 +8,7 @@ test('导入文件默认使用不带扩展名的文件名作为用例名称', ()
   expect(fileTitle('无扩展名')).toBe('无扩展名')
 })
 
-test('新建测试任务默认使用所属用例名称', () => {
-  expect(taskTitle({ title: '客户管理' })).toBe('客户管理')
+test('新建测试任务默认显示首个编号，已有编号由服务端校正', () => {
+  expect(taskTitle({ title: '客户管理' })).toBe('客户管理（1）')
   expect(taskTitle(null)).toBe('')
 })

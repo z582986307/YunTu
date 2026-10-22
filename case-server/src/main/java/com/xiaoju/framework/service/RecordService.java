@@ -18,6 +18,7 @@ import java.util.List;
  * @date 2020/8/18
  */
 public interface RecordService {
+    String suggestTitle(Long caseId);
     PageModule<RecordListResp> getPageByProductLineId(Long productLineId, int pageNum, int pageSize,
                                                       String keyword, String owner, String beginTime, String endTime);
 

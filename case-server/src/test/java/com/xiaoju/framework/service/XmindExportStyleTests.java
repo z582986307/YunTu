@@ -42,6 +42,8 @@ public class XmindExportStyleTests {
         assertEquals("urn:xmind:xmap:xmlns:style:2.0", styles.getRootElement().element("automatic-styles").getNamespaceURI());
         assertTrue(styles.asXML().contains("line-color=\"#000000\""));
         assertTrue(styles.asXML().contains("border-line-color=\"#000000\""));
+        assertTrue(styles.asXML().contains("line-class=\"org.xmind.branchConnection.elbow\""));
+        assertTrue(styles.asXML().contains("shape-class=\"org.xmind.topicShape.rect\""));
         assertTrue(manifest.asXML().contains("styles.xml"));
         assertEquals("urn:xmind:xmap:xmlns:manifest:1.0", manifest.getRootElement().getNamespaceURI());
     }

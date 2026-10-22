@@ -349,10 +349,10 @@ public class FileServiceImpl implements FileService {
                 .addAttribute("svg:fill", fill)
                 .addAttribute("border-line-color", "#000000")
                 .addAttribute("border-line-width", "1pt")
-                .addAttribute("line-class", "org.xmind.branchConnection.bight")
+                .addAttribute("line-class", "org.xmind.branchConnection.elbow")
                 .addAttribute("line-color", "#000000")
                 .addAttribute("line-width", "1pt")
-                .addAttribute("shape-class", "org.xmind.topicShape.roundedRect")
+                .addAttribute("shape-class", "org.xmind.topicShape.rect")
                 .addAttribute("fo:color", color)
                 .addAttribute("fo:font-size", fontSize);
     }

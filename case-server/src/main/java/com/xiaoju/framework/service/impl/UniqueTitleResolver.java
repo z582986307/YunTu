@@ -13,4 +13,12 @@ final class UniqueTitleResolver {
         }
         throw new IllegalStateException("无法生成不重复的任务名称");
     }
+
+    static String nextAvailableNumbered(String base, Predicate<String> occupied) {
+        for (int number = 1; number < Integer.MAX_VALUE; number++) {
+            String candidate = base + "（" + number + "）";
+            if (!occupied.test(candidate)) return candidate;
+        }
+        throw new IllegalStateException("无法生成不重复的任务名称");
+    }
 }

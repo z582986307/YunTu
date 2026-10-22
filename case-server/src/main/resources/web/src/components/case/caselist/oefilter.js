@@ -149,6 +149,7 @@ class OeFilter extends React.Component {
           <Col span={24} className="m-b-24">
             <div className="filter-item">
               <Input
+                allowClear
                 placeholder="用例名称"
                 style={{ width: '100%' }}
                 onChange={this.nameFiltersInput}
@@ -189,6 +190,7 @@ class OeFilter extends React.Component {
           <Col span={24} className="m-b-24">
             <div className="filter-item">
               <Input
+                allowClear
                 value={value}
                 placeholder="关联需求"
                 onChange={e => this.handleChange(e.target.value)}
@@ -199,6 +201,7 @@ class OeFilter extends React.Component {
           <Col span={24} className="m-b-24">
             <div className="filter-item">
               <Input
+                allowClear
                 value={caseKeyWords}
                 placeholder="用例关键词"
                 onChange={e => this.caseKeyWordsChange(e.target.value)}

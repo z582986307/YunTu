@@ -136,7 +136,7 @@ class TaskList extends React.Component {
     return <div className="task-list-page">
       <div className="task-list-heading">测试任务</div>
       <div className="task-list-filters">
-        <Input.Search aria-label="搜索任务名称或 ID" placeholder="任务名称、任务 ID、用例 ID"
+        <Input.Search allowClear aria-label="搜索任务名称或 ID" placeholder="任务名称、任务 ID、用例 ID"
           value={draft.keyword} onChange={event => this.changeDraft({ keyword: event.target.value })}
           onSearch={() => this.applyFilters(this.state.draft)} />
         <Select showSearch allowClear aria-label="筛选负责人" placeholder="负责人" filterOption={false}

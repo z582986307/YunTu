@@ -31,6 +31,11 @@ public class RecordController {
     @Resource
     RecordService recordService;
 
+    @GetMapping(value = "/suggestTitle")
+    public Response<String> suggestTitle(@RequestParam Long caseId) {
+        return Response.success(recordService.suggestTitle(caseId));
+    }
+
     @GetMapping(value = "/page")
     public Response<?> getRecordPage(@RequestParam Long productLineId,
                                      @RequestParam(defaultValue = "1") Integer pageNum,

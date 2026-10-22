@@ -39,6 +39,7 @@ import MindMapSearch from './components/mindMapSearch';
 import { expandToList, initData, buttons } from './constants';
 import { NavBar } from './components';
 import { preview, editInput, clipboardRuntime } from './util';
+import { waitForNewNodeLayout } from './util/editInput';
 import {
   getLockStatusLabel,
   expandAllExecutionNodes,
@@ -123,6 +124,7 @@ class KityminderEditor extends Component {
   }
   componentWillUnmount() {
     clearTimeout(this.autoSaveTimer);
+    if (this.minder) this.minder.off('layoutapply layoutallfinish', this.followEditLayout);
     this.restoreEditingNodeLayer();
     window.removeEventListener('mousemove', this.handleImageResizeMove);
     window.removeEventListener('mouseup', this.handleImageResizeEnd);
@@ -179,6 +181,7 @@ class KityminderEditor extends Component {
         // 如果被选中节点之前处于编辑状态，变更后节点失去焦点
         // 则先更新节点内容，然后隐藏编辑框、清空编辑框字段
         if (showEdit) {
+          minder.off('layoutapply layoutallfinish', this.followEditLayout);
           const input = this.inputNode && this.inputNode.querySelector('textarea');
           const inputContent = input ? input.value : this.state.inputContent;
           const discardComposition = this.composing || this.discardPendingComposition ||
@@ -609,6 +612,7 @@ class KityminderEditor extends Component {
       }
       if (e.keyCode === 13 && !e.shiftKey) {
         e.preventDefault();
+        this.minder.off('layoutapply layoutallfinish', this.followEditLayout);
         const input = this.inputNode && this.inputNode.querySelector('textarea');
         const inputContent = input ? input.value : this.state.inputContent;
         delete selectedNode._editingText;
@@ -688,11 +692,18 @@ class KityminderEditor extends Component {
 
   scheduleNewNodeInput = () => {
     const node = this.minder.getSelectedNode();
-    setTimeout(() => {
+    if (!node) return;
+    waitForNewNodeLayout(this.minder, node, () => {
       if (!this.state.showEdit && this.minder.getSelectedNode() === node) {
         this.handleShowInput('', true);
       }
-    }, 300);
+    });
+  };
+
+  followEditLayout = event => {
+    if (!this.state.showEdit || !this.inputNode) return;
+    const node = this.minder.getSelectedNode();
+    if (node && (!event || !event.node || event.node === node)) editInput(node, this.inputNode);
   };
 
   handleShowInput = (replacementText, showWhileTyping = false, preserveExistingInput = false) => {
@@ -705,6 +716,7 @@ class KityminderEditor extends Component {
       this.pendingImeEnter = false;
       this.setState({ showEdit: true, inputContent }, () => {
         window.showEdit = true;
+        minder.on('layoutapply layoutallfinish', this.followEditLayout);
         this.raiseEditingNodeLayer(node);
         const input = inputNode.querySelector('textarea');
         if (!preserveExistingInput) input.value = inputContent;

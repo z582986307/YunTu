@@ -11,10 +11,10 @@ export const yieldToBrowser = () => {
   return new Promise(resolve => setTimeout(resolve, 0));
 };
 
-export const runInSlices = async (items, visit, task, maxBatch = 64) => {
+export const runInSlices = async (items, visit, task, maxBatch = 64, yieldTask = yieldToBrowser) => {
   let cursor = 0;
   while (cursor < items.length) {
-    await yieldToBrowser();
+    await yieldTask();
     if (task.cancelled) return;
     const started = now();
     let processed = 0;
@@ -24,6 +24,13 @@ export const runInSlices = async (items, visit, task, maxBatch = 64) => {
       processed++;
     } while (cursor < items.length && processed < maxBatch && now() - started < 6);
   }
+};
+
+const yieldForInteraction = () => {
+  if (typeof scheduler !== 'undefined' && scheduler.postTask) {
+    return scheduler.postTask(() => {}, { priority: 'user-visible' });
+  }
+  return new Promise(resolve => setTimeout(resolve, 0));
 };
 
 export const createSpatialRenderGroups = async (nodes, task) => {
@@ -52,10 +59,10 @@ const scheduleLayout = minder => {
     for (let cursor = 0; cursor < nodes.length; cursor++) {
       if (nodes[cursor].isExpanded()) nodes.push(...nodes[cursor].children);
     }
-    await runInSlices(nodes, node => node.setLayoutTransform(null), task, 256);
+    await runInSlices(nodes, node => node.setLayoutTransform(null), task, 256, yieldForInteraction);
     const bottomUp = nodes.slice().reverse();
     for (let round = 1; round <= 2; round++) {
-      await runInSlices(bottomUp, node => node.getLayoutInstance().doLayout(node, node.isExpanded() ? node.children : [], round), task);
+      await runInSlices(bottomUp, node => node.getLayoutInstance().doLayout(node, node.isExpanded() ? node.children : [], round), task, 128, yieldForInteraction);
       if (task.cancelled) return;
     }
     await runInSlices(nodes, node => {
@@ -68,7 +75,7 @@ const scheduleLayout = minder => {
       node.setGlobalLayoutTransform(matrix);
       minder.fire('layoutapply', { node, matrix });
       minder.fire('layoutfinish', { node, matrix });
-    }, task, 128);
+    }, task, 128, yieldForInteraction);
     if (!task.cancelled) {
       minder.fire('layout');
       minder.fire('layoutallfinish');

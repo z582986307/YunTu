@@ -23,6 +23,29 @@ export const getScreenEditMetrics = (shape, offsetParent, fontSize) => {
   };
 };
 
+export const waitForNewNodeLayout = (minder, node, onReady) => {
+  const pendingLayout = minder._pendingLayout;
+  if (!pendingLayout) {
+    onReady();
+    return;
+  }
+  const element = node.getRenderContainer().node;
+  const previousVisibility = element.style.visibility;
+  element.style.visibility = 'hidden';
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    minder.off('layoutallfinish', finish);
+    minder.off('layouterror', finish);
+    element.style.visibility = previousVisibility;
+    onReady();
+  };
+  minder.on('layoutallfinish', finish);
+  minder.on('layouterror', finish);
+  pendingLayout.then(finish, finish);
+};
+
 export default function editInput(selectedNode, inputNode, positionOnly) {
   const $previewer = inputNode;
   const $container = document.getElementsByClassName('kityminder-core-container');
