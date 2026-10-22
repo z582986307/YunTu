@@ -66,7 +66,7 @@ assert(styles.includes('background: #fff;') && styles.includes('z-index: 80;'), 
 assert(colorPicker.includes("'#edf5ff'"), '节点背景色应提供浅蓝色快捷配置')
 assert(constants.includes("'byte-blue': '天蓝色（新）'"), '当前主题入口应显示为中文“天蓝色（新）”')
 assert(language.includes("'byte-blue': '天蓝色（新）'"), '脑图语言包应将当前主题显示为中文“天蓝色（新）”')
-assert(documentTemplate.includes('href="/favicon.svg"'), '网页标签应使用新的平台 favicon')
+assert(documentTemplate.includes('href="/favicon.svg?v=yuntu-20261022"'), '网页标签应使用带新版本地址的平台 favicon')
 assert(favicon.includes('aria-label="云图用例管理平台"'), '网页标签 Logo 应与当前平台名称相关')
 
 const caseMgt = fs.readFileSync(path.resolve(__dirname, '../src/components/case/casemgt/index.js'), 'utf8')

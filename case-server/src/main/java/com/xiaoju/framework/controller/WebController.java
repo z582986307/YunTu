@@ -23,6 +23,11 @@ public class WebController {
         return "index";
     }
 
+    @RequestMapping("/favicon.ico")
+    public String favicon() {
+        return "redirect:/favicon.svg?v=yuntu-20261022";
+    }
+
     @RequestMapping("/history/*")
     public String history(){
         return "index";

@@ -281,7 +281,7 @@ class Lists extends React.Component {
                     <Menu.Item>
                       <a
                         href={`/api/file/export?id=${record.id}`}
-                        target="_blank"
+                        download
                       >
                         导出xmind
                       </a>

@@ -23,6 +23,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.constraints.NotNull;
 import java.net.URLEncoder;
+import java.io.IOException;
 
 /**
  * 文件上传与导出
@@ -119,7 +120,7 @@ public class UploadController {
      * @param id 用例id
      */
     @GetMapping(value = "/export")
-    public void exportXmind(@RequestParam @NotNull(message = "用例id为空") Long id, HttpServletRequest request, HttpServletResponse response) {
+    public void exportXmind(@RequestParam @NotNull(message = "用例id为空") Long id, HttpServletRequest request, HttpServletResponse response) throws IOException {
         try {
             ExportXmindResp resp = fileService.exportXmindFile(id, request.getHeader(SystemConstant.HTTP_USER_AGENT));
             populateHttpResponse(response, resp.getData(), resp.getFileName());
@@ -127,8 +128,11 @@ public class UploadController {
             throw new CaseServerException(e.getLocalizedMessage(), e.getStatus());
         } catch (Exception e) {
             LOGGER.error("[导出x-mind错误] caseId={}, 错误原因={}", id, e.getMessage());
-            e.printStackTrace();
-            response.setStatus(StatusCode.FILE_IMPORT_ERROR.getStatus());
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            response.setContentType("text/plain; charset=UTF-8");
+            response.getWriter().write(e.getMessage() != null && e.getMessage().startsWith("导出图片失败")
+                    ? "导出失败：图片文件缺失，请联系管理员恢复图片后重试。"
+                    : "导出失败，请稍后重试。");
         }
     }
 

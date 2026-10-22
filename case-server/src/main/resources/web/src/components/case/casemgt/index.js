@@ -204,7 +204,7 @@ export default class CaseMgt extends React.Component {
             mediaShow={!progressShow}
             toolbar={{
               image: true,
-              theme: ['classic-compact', 'fresh-blue', 'byte-blue', 'ink-black', 'fresh-green-compat'],
+              theme: ['byte-blue', 'ink-black', 'classic-compact', 'fresh-blue', 'fresh-green-compat'],
               template: ['default', 'right', 'fish-bone'],
               noteTemplate: '# test',
               addFactor,
