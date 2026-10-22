@@ -136,18 +136,19 @@ class TaskList extends React.Component {
     return <div className="task-list-page">
       <div className="task-list-heading">测试任务</div>
       <div className="task-list-filters">
-        <Input.Search aria-label="搜索任务名称或 ID" placeholder="搜索任务名称、任务 ID、用例 ID"
+        <Input.Search aria-label="搜索任务名称或 ID" placeholder="任务名称、任务 ID、用例 ID"
           value={draft.keyword} onChange={event => this.changeDraft({ keyword: event.target.value })}
           onSearch={() => this.applyFilters(this.state.draft)} />
-        <Select showSearch allowClear aria-label="筛选负责人" placeholder="筛选负责人" filterOption={false}
+        <Select showSearch allowClear aria-label="筛选负责人" placeholder="负责人" filterOption={false}
           value={draft.owner || undefined} onSearch={this.searchOwners}
           onChange={value => this.changeDraft({ owner: value || '' })}
           notFoundContent={fetching ? '搜索中...' : '搜索负责人'}>
           {ownerList.map(owner => <Select.Option key={owner} value={owner}>{owner}</Select.Option>)}
         </Select>
         <DatePicker.RangePicker aria-label="筛选创建时间"
-          value={draft.dates.length === 2 ? draft.dates.map(date => moment(date, 'YYYY-MM-DD')) : []}
-          onChange={(_, dates) => this.changeDraft({ dates })} />
+          placeholder={['创建时间', '结束时间']}
+          value={draft.dates.length === 2 && draft.dates.every(Boolean) ? draft.dates.map(date => moment(date, 'YYYY-MM-DD')) : null}
+          onChange={(_, dates) => this.changeDraft({ dates: dates && dates.every(Boolean) ? dates : [] })} />
         <Button type="primary" onClick={() => this.applyFilters(this.state.draft)}>筛选</Button>
         <Button onClick={() => this.applyFilters({ keyword: '', owner: '', dates: [] })}>重置</Button>
       </div>

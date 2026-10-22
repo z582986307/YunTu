@@ -34,6 +34,8 @@ public interface TestCaseMapper {
      */
     TestCase selectOne(Long id);
 
+    int countActiveByTitle(@Param("title") String title, @Param("excludeId") Long excludeId);
+
     /**
      * 修改用例实体
      *

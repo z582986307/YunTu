@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.xiaoju.framework.mapper.TestCaseMapper">
+  <select id="countActiveByTitle" resultType="int">
+    select count(*) from test_case where title = #{title} and coalesce(is_delete, 0) = 0
+    <if test="excludeId != null">and id != #{excludeId}</if>
+  </select>
   <resultMap id="BaseResultMap" type="com.xiaoju.framework.entity.persistent.TestCase">
     <id column="id" jdbcType="BIGINT" property="id" />
     <result column="group_id" jdbcType="BIGINT" property="groupId" />

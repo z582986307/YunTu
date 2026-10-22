@@ -352,6 +352,14 @@
   span.ant-tree-node-content-wrapper {
   width: 100%;
 }
+.inline-case-filters {
+  padding: 4px 20px 14px;
+  background: #fff;
+  .ant-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .ant-col { float: none; width: auto; min-width: 150px; flex: 1 1 170px; margin-bottom: 0 !important; }
+  .filter-item { margin: 0; }
+  .button-bottom { position: static; border: 0; width: auto; line-height: normal; margin-top: 10px; }
+}
 
 .table-wrap .case-list-expand-hit-area {
   display: flex;

@@ -7,7 +7,6 @@ import './index.scss';
 import _ from 'lodash';
 import CaseModal from './caseModal.js';
 import List from './list.js';
-import Filter from './filter.js';
 import OeFilter from './oefilter';
 import FileTree from './tree';
 import TaskList from './taskList';
@@ -27,15 +26,12 @@ class CaseLists extends React.Component {
       title: '',
       visible: false,
       iterationList: [], // 需求列表
-      showFilterBox: false, // 展示筛选框
       productMember: [], // 所有人
       currCase: null, // 当前选中case
       showAddRecord: false, // 展开添加记录弹框
       envList: [], // 执行记录环境列表
       options: { projectLs: [], requirementLs: [] },
       requirement: null,
-      filterStatus: 'filter-hide',
-      filterVisble: false,
       loading: true,
       current: 1,
       productLineId: '',
@@ -133,8 +129,8 @@ class CaseLists extends React.Component {
         creator: createrFilter || '',
         channel: 1,
         requirementId: iterationFilter || '',
-        beginTime: choiseDate.length > 0 ? `${choiseDate[0]} 00:00:00` : '',
-        endTime: choiseDate.length > 0 ? `${choiseDate[1]}  23:59:59` : '',
+        beginTime: choiseDate[0] ? `${choiseDate[0]} 00:00:00` : '',
+        endTime: choiseDate[1] ? `${choiseDate[1]} 23:59:59` : '',
         bizId: caseIds ? caseIds : 'root',
         caseKeyWords: caseKeyWords || '',
       },
@@ -196,27 +192,8 @@ class CaseLists extends React.Component {
       },
     );
   };
-  onShowFilterBoxClick = () => {
-    let showFilterBox = !this.state.showFilterBox;
-    this.setState({
-      showFilterBox,
-      iterationFilter: '',
-      nameFilter: '',
-      choiseDate: [],
-      createrFilter: '',
-      caseKeyWords: '',
-    });
-  };
   onClose = vis => {
     this.setState({ visible: vis });
-  };
-
-  filterHandler = () => {
-    this.setState({ filterStatus: 'filter-show', filterVisble: true });
-  };
-
-  closeFilter = () => {
-    this.setState({ filterStatus: 'filter-hide', filterVisble: false });
   };
 
   render() {
@@ -225,8 +202,6 @@ class CaseLists extends React.Component {
       list,
       total,
       productMember,
-      filterVisble,
-      filterStatus,
       nameFilter,
       createrFilter,
       iterationFilter,
@@ -276,12 +251,6 @@ class CaseLists extends React.Component {
               </Col>
               <Col xs={6} className="text-right">
                 <Button
-                  style={{ marginRight: 16 }}
-                  onClick={this.filterHandler}
-                >
-                  <Icon type="filter" /> 筛选
-                </Button>
-                <Button
                   type="primary"
                   onClick={() => {
                     this.handleTask('add');
@@ -300,12 +269,13 @@ class CaseLists extends React.Component {
             <hr
               style={{ border: '0', backgroundColor: '#e8e8e8', height: '1px' }}
             />
-            {this.state.showFilterBox && (
-              <Filter
-                getCaseList={this.getCaseList}
-                productMember={productMember}
-              />
-            )}
+            <OeFilter inline
+              getCaseList={this.getCaseList}
+              productMember={productMember}
+              initialFilters={{ nameFilter, createrFilter, iterationFilter, choiseDate, caseKeyWords }}
+              oeApiPrefix={this.props.oeApiPrefix}
+              productId={productLineId}
+            />
             <List
               productId={productLineId}
               options={this.state.options}
@@ -327,19 +297,6 @@ class CaseLists extends React.Component {
               choiseDate={choiseDate}
             ></List>
 
-            {(filterVisble && (
-              <OeFilter
-                onCancel={this.closeFilter}
-                getCaseList={this.getCaseList}
-                productMember={productMember}
-                filterStatus={filterStatus}
-                closeFilter={this.closeFilter}
-                visible={filterVisble}
-                oeApiPrefix={this.props.oeApiPrefix}
-                productId={productLineId}
-              />
-            )) ||
-              null}
           </div>
           )}
 

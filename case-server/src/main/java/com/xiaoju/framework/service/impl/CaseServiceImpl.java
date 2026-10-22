@@ -114,8 +114,12 @@ public class CaseServiceImpl implements CaseService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long insertOrDuplicateCase(CaseCreateReq request) {
+    public synchronized Long insertOrDuplicateCase(CaseCreateReq request) {
+        if (caseMapper.countActiveByTitle(request.getTitle().trim(), null) > 0) {
+            throw new CaseServerException("用例名称已存在，请修改后重试", StatusCode.INTERNAL_ERROR);
+        }
         TestCase testcase = buildCase(request);
+        testcase.setTitle(request.getTitle().trim());
         caseMapper.insert(testcase);
         // 可能会多个加入  所以不要使用dirService.addCase()
         DirNodeDto tree = dirService.getDirTree(testcase.getProductLineId(), testcase.getChannel());
@@ -127,16 +131,20 @@ public class CaseServiceImpl implements CaseService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public DirTreeResp updateCase(CaseEditReq request) {
+    public synchronized DirTreeResp updateCase(CaseEditReq request) {
         TestCase testCase = caseMapper.selectOne(request.getId());
         if (testCase == null) {
             throw new CaseServerException("用例不存在", StatusCode.NOT_FOUND_ENTITY);
+        }
+        if (caseMapper.countActiveByTitle(request.getTitle().trim(), request.getId()) > 0) {
+            throw new CaseServerException("用例名称已存在，请修改后重试", StatusCode.INTERNAL_ERROR);
         }
 
         List<String> addBizs = getDiffSet(request.getBizId(), testCase.getBizId());
         List<String> rmBizs = getDiffSet(testCase.getBizId(), request.getBizId());
 
         BeanUtils.copyProperties(request, testCase);
+        testCase.setTitle(request.getTitle().trim());
         testCase.setGmtModified(new Date());
         testCase.setModifier(request.getModifier());
         DirNodeDto tree = dirService.getDirTree(testCase.getProductLineId(), testCase.getChannel());

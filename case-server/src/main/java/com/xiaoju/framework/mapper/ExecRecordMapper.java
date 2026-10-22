@@ -33,6 +33,8 @@ public interface ExecRecordMapper {
      */
     ExecRecord selectOne(Long id);
 
+    int countActiveByTitle(@Param("title") String title, @Param("excludeId") Long excludeId);
+
     /**
      * 根据用例id获取所属的所有执行任务
      *

@@ -12,17 +12,18 @@ class OeFilter extends React.Component {
   static propTypes = {};
   constructor(props) {
     super(props);
+    const initial = props.initialFilters || {};
     this.state = {
-      choiseDate: [],
+      choiseDate: initial.choiseDate || [],
       iterationList: [], // 需求列表
-      iterationFilter: [],
-      createrFilter: [],
+      iterationFilter: initial.iterationFilter || '',
+      createrFilter: initial.createrFilter || '',
       current: 1,
-      nameFilter: '',
+      nameFilter: initial.nameFilter || '',
       fetching: false,
       data: [],
-      value: [],
-      caseKeyWords: '',
+      value: initial.iterationFilter || '',
+      caseKeyWords: initial.caseKeyWords || '',
       requirementOe: [],
     };
     this.lastFetchId = 0;
@@ -48,7 +49,7 @@ class OeFilter extends React.Component {
     this.setState({ nameFilter: e.target.value });
   };
   onDataChange = (value, dateString) => {
-    this.setState({ choiseDate: dateString });
+    this.setState({ choiseDate: dateString && dateString.every(Boolean) ? dateString : [] });
   };
   unDoFilter = () => {
     this.setState(
@@ -137,13 +138,13 @@ class OeFilter extends React.Component {
   }
   render() {
     const { choiseDate, value, fetching, caseKeyWords } = this.state;
-    const { productMember, filterStatus, closeFilter } = this.props;
+    const { productMember, inline, filterStatus, closeFilter } = this.props;
     return (
-      <div className={`filter-case-modal-wrapper ${filterStatus}`}>
-        <div className="filter-case-header">
+      <div className={inline ? 'inline-case-filters' : `filter-case-modal-wrapper ${filterStatus}`}>
+        {!inline && <div className="filter-case-header">
           <span>快速筛选</span>
           <Icon onClick={closeFilter} type="close" />
-        </div>
+        </div>}
         <Row>
           <Col span={24} className="m-b-24">
             <div className="filter-item">

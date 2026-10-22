@@ -126,10 +126,20 @@ public class RecordServiceImpl implements RecordService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long addRecord(RecordAddReq req) {
+    public synchronized Long addRecord(RecordAddReq req) {
+        String title = req.getTitle().trim();
+        TestCase sourceCase = caseMapper.selectOne(req.getCaseId());
+        if (sourceCase == null) throw new CaseServerException("用例不存在", StatusCode.NOT_FOUND_ENTITY);
+        if (title.equals(sourceCase.getTitle().trim())) {
+            title = UniqueTitleResolver.nextAvailable(title,
+                    candidate -> recordMapper.countActiveByTitle(candidate, null) > 0);
+        } else if (recordMapper.countActiveByTitle(title, null) > 0) {
+            throw new CaseServerException("测试任务名称已存在，请修改后重试", StatusCode.INTERNAL_ERROR);
+        }
         // 根据caseContent和recordContent进行一次节点修剪合并
         JSONObject merged = getData(new MergeCaseDto(req.getCaseId(), req.getChooseContent(), EMPTY_STR, DEFAULT_ENV, 0L));
         ExecRecord record = buildExecRecord(req, merged);
+        record.setTitle(title);
         return recordMapper.insert(record);
     }
 
@@ -147,6 +157,9 @@ public class RecordServiceImpl implements RecordService {
         ExecRecord record = recordMapper.selectOne(req.getId());
         if (record == null) {
             throw new CaseServerException("对应执行任务不存在", StatusCode.NOT_FOUND_ENTITY);
+        }
+        if (recordMapper.countActiveByTitle(req.getTitle().trim(), req.getId()) > 0) {
+            throw new CaseServerException("测试任务名称已存在，请修改后重试", StatusCode.INTERNAL_ERROR);
         }
         // 如果修改圈选用例时，有人在协同修改任务或者用例，那么就不让改
 //        if (!record.getChooseContent().equals(req.getChooseContent())) {
@@ -168,7 +181,7 @@ public class RecordServiceImpl implements RecordService {
         }
 
         record.setModifier(req.getModifier());
-        record.setTitle(req.getTitle());
+        record.setTitle(req.getTitle().trim());
         record.setChooseContent(req.getChooseContent());
         record.setDescription(StringUtils.isEmpty(req.getDescription()) ? EMPTY_STR : req.getDescription());
         record.setOwner(StringUtils.isEmpty(req.getOwner()) ? EMPTY_STR : req.getOwner());
