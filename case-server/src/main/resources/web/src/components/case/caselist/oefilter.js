@@ -40,7 +40,7 @@ class OeFilter extends React.Component {
         choiseDate: [],
         createrFilter: '',
         current: 1,
-        value: [],
+        value: '',
         caseKeyWords: '',
       });
     }
@@ -59,7 +59,7 @@ class OeFilter extends React.Component {
         choiseDate: [],
         createrFilter: '',
         current: 1,
-        value: [],
+        value: '',
         caseKeyWords: '',
       },
       () => {

@@ -22,6 +22,7 @@ moment.locale('zh-cn');
 import _ from 'lodash';
 import PropTypes from 'prop-types';
 import TaskModal from './taskModal';
+import resizableColumns from './resizableColumns';
 import getQueryString from '@/utils/getCookies';
 const getCookies = getQueryString.getCookie;
 import debounce from 'lodash/debounce';
@@ -41,6 +42,7 @@ class Lists extends React.Component {
       nameFilter: '', // 用例名称筛选最终选择
       caseFile: null, // 保存上传的file文件，单文件    };
       checked: false,
+      columnWidths: {},
       requirementIds: [],
       requirementObj: [],
       taskVisible: false,
@@ -682,7 +684,7 @@ class Lists extends React.Component {
     return (
       <div>
         <Table
-          columns={this.setColumns()}
+          columns={resizableColumns(this.setColumns(), this.state.columnWidths, (key, width) => this.setState(state => ({ columnWidths: { ...state.columnWidths, [key]: width } })))}
           dataSource={list}
           className="table-wrap"
           rowKey="id"

@@ -30,6 +30,7 @@ import org.dom4j.io.XMLWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
@@ -58,6 +59,9 @@ public class FileServiceImpl implements FileService {
 
     @Resource
     private TestCaseMapper caseMapper;
+
+    @Value("${web.upload-path}")
+    private String uploadPath;
 
     private static final Logger log = LoggerFactory.getLogger(FileServiceImpl.class);
 
@@ -329,32 +333,90 @@ public class FileServiceImpl implements FileService {
     }
 
     private void writeStylesXml(String path) {
+        writeStylesXml(null, path);
+    }
+
+    private void writeStylesXml(TestCase testCase, String path) {
+        JSONObject content = testCase == null ? null : JSON.parseObject(testCase.getCaseContent());
+        String theme = content == null ? null : content.getString("theme");
+        String fill = "#ffffff";
+        String color = "#334e70";
+        String border = "#000000";
+        String rootFill = "#e7f1ff";
+        String mainFill = "#f4f8ff";
+        if ("ink-black".equals(theme)) {
+            color = "#111827";
+            border = "#9ca3af";
+        } else if (theme != null) {
+            String accent = null;
+            if (theme.contains("red")) accent = "#d94b58";
+            else if (theme.contains("green")) accent = "#4c9c75";
+            else if (theme.contains("purple")) accent = "#8065ae";
+            else if (theme.contains("pink")) accent = "#d678a3";
+            else if (theme.contains("soil")) accent = "#b18b4b";
+            else if (theme.contains("blue")) accent = "#4c8dff";
+            if (accent != null) {
+                border = accent;
+                color = "#243b5a";
+                rootFill = accent;
+                mainFill = "#f6f8fc";
+            }
+        }
         Document document = DocumentHelper.createDocument();
         Element styles = document.addElement("xmap-styles", "urn:xmind:xmap:xmlns:style:2.0")
                 .addAttribute("version", "2.0")
                 .addNamespace("fo", "http://www.w3.org/1999/XSL/Format")
                 .addNamespace("svg", "http://www.w3.org/2000/svg");
         Element automatic = styles.addElement("automatic-styles");
-        writeTopicStyle(automatic, XMIND_STYLE_ROOT, "#e7f1ff", "#1f3b64", "18pt");
-        writeTopicStyle(automatic, XMIND_STYLE_MAIN, "#f4f8ff", "#274568", "14pt");
-        writeTopicStyle(automatic, XMIND_STYLE_SUB, "#ffffff", "#334e70", "12pt");
+        writeTopicStyle(automatic, XMIND_STYLE_ROOT, "ink-black".equals(theme) ? fill : rootFill, "ink-black".equals(theme) ? color : "#1f3b64", "18pt", border);
+        writeTopicStyle(automatic, XMIND_STYLE_MAIN, "ink-black".equals(theme) ? fill : mainFill, "ink-black".equals(theme) ? color : "#274568", "14pt", border);
+        writeTopicStyle(automatic, XMIND_STYLE_SUB, fill, color, "12pt", border);
+        if (content != null && content.getJSONObject(ROOT) != null) {
+            writeNodeStyles(automatic, content.getJSONObject(ROOT));
+        }
         writeXml(path + "/styles.xml", document);
     }
 
-    private void writeTopicStyle(Element styles, String id, String fill, String color, String fontSize) {
+    private void writeTopicStyle(Element styles, String id, String fill, String color, String fontSize, String border) {
         styles.addElement("style")
                 .addAttribute("id", id)
                 .addAttribute("type", "topic")
                 .addElement("topic-properties")
                 .addAttribute("svg:fill", fill)
-                .addAttribute("border-line-color", "#000000")
+                .addAttribute("border-line-color", border)
                 .addAttribute("border-line-width", "1pt")
-                .addAttribute("line-class", "org.xmind.branchConnection.elbow")
+                .addAttribute("line-class", "org.xmind.branchConnection.roundedElbow")
                 .addAttribute("line-color", "#000000")
                 .addAttribute("line-width", "1pt")
-                .addAttribute("shape-class", "org.xmind.topicShape.rect")
+                .addAttribute("shape-class", "org.xmind.topicShape.roundedRect")
                 .addAttribute("fo:color", color)
                 .addAttribute("fo:font-size", fontSize);
+    }
+
+    private void writeNodeStyles(Element styles, JSONObject node) {
+        JSONObject data = node.getJSONObject(DATA);
+        if (data != null && data.getString("id") != null) {
+            String color = data.getString("color");
+            String fontSize = data.getString("font-size");
+            String family = data.getString("font-family");
+            String background = data.getString("background");
+            String weight = data.getString("font-weight");
+            String fontStyle = data.getString("font-style");
+            if (color != null || fontSize != null || family != null || background != null || weight != null || fontStyle != null) {
+                Element properties = styles.addElement("style")
+                        .addAttribute("id", "yuntu-node-" + data.getString("id"))
+                        .addAttribute("type", "topic")
+                        .addElement("topic-properties");
+                if (color != null) properties.addAttribute("fo:color", color);
+                if (fontSize != null) properties.addAttribute("fo:font-size", fontSize + "pt");
+                if (family != null) properties.addAttribute("fo:font-family", family);
+                if (background != null) properties.addAttribute("svg:fill", background);
+                if (weight != null) properties.addAttribute("fo:font-weight", weight);
+                if (fontStyle != null) properties.addAttribute("fo:font-style", fontStyle);
+            }
+        }
+        JSONArray children = node.getJSONArray("children");
+        if (children != null) for (Object child : children) writeNodeStyles(styles, (JSONObject) child);
     }
 
     private void writeManifestXml(String path){
@@ -375,7 +437,7 @@ public class FileServiceImpl implements FileService {
             for (File file: Objects.requireNonNull(attachmentDir.listFiles())) {
                 root.addElement("file-entry")
                         .addAttribute("full-path","attachments/" + file.getName())
-                        .addAttribute("media-type","image/png");;
+                        .addAttribute("media-type", file.getName().toLowerCase().endsWith(".jpg") || file.getName().toLowerCase().endsWith(".jpeg") ? "image/jpeg" : file.getName().toLowerCase().endsWith(".gif") ? "image/gif" : "image/png");
             }
         }
 
@@ -421,7 +483,7 @@ public class FileServiceImpl implements FileService {
         writeContentXml(testCase,path);
         //写Meta文件
         writeMetaXml(path);
-        writeStylesXml(path);
+        writeStylesXml(testCase, path);
         //写MainFest文件,需要在此处添加文件夹中的问题信息
         writeManifestXml(path);
 
@@ -449,13 +511,14 @@ public class FileServiceImpl implements FileService {
                 .addAttribute("id",ZEN_ROOT_VERSION) // 给sheet添加属性id
                 .addAttribute("modified-by",XMIND_MODIFIED_VERSION) // 给sheet添加属性modified-by
                 .addAttribute("timestamp",XMIND_CREATED_VERSION); // 给sheet添加属性timestamp
+        sheet.addElement("title").setText(testCase.getTitle() == null ? "" : StringEscapeUtils.escapeXml11(testCase.getTitle()));
         // 获得全部json数据，此时的json数据中有图片的链接地址，需要把image取出来
         JSONObject rootObj = JSON.parseObject(testCase.getCaseContent()).getJSONObject(ROOT);
         LOGGER.info("case中的内容：" + testCase.getCaseContent());
         Element topic = sheet.addElement("topic") // 给sheet添加新的节点topic
                 .addAttribute("id",rootObj.getJSONObject(DATA).getString("id")) // 获得id
                 .addAttribute("structure-class", "org.xmind.ui.logic.right")
-                .addAttribute("style-id", XMIND_STYLE_ROOT)
+                .addAttribute("style-id", TreeUtil.hasNodeStyle(rootObj.getJSONObject(DATA)) ? "yuntu-node-" + rootObj.getJSONObject(DATA).getString("id") : XMIND_STYLE_ROOT)
                 .addAttribute("modified-by","didi") // 获得用户名
                 .addAttribute("timestamp",rootObj.getJSONObject(DATA).getString("created")); // 获得创建时间戳
 
@@ -469,7 +532,8 @@ public class FileServiceImpl implements FileService {
         }
         title.setText(text); // 加入标题
         // 在xml里面的children添加数据，但是对于图片来说，它的key是image，而不是children
-        TreeUtil.exportDataToXml(rootObj.getJSONArray("children"), topic, path, 1);
+        TreeUtil.exportImage(rootObj.getJSONObject(DATA), topic, path, uploadPath);
+        TreeUtil.exportDataToXml(rootObj.getJSONArray("children"), topic, path, 1, uploadPath);
         String targetPath = path  + "/content.xml";
         //写入xml
         writeXml(targetPath,document);

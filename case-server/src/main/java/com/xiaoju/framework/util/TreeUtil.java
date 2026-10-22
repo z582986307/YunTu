@@ -29,6 +29,11 @@ import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -365,8 +370,8 @@ public class TreeUtil {
     }
 
     // 导出json内容到xml
-    public static void exportDataToXml(JSONArray children, Element rootTopic, String path, int depth){
-        if(children.size() == 0)
+    public static void exportDataToXml(JSONArray children, Element rootTopic, String path, int depth, String uploadPath){
+        if(children == null || children.size() == 0)
             return;
 
         Document document = rootTopic.getDocument();
@@ -382,61 +387,10 @@ public class TreeUtil {
                     .addAttribute("id",dataObj.getString("id"))
                     .addAttribute("modified-by","didi")
                     .addAttribute("timestamp",dataObj.getString("created"))
-                    .addAttribute("style-id", depth == 1 ? XmindConstant.XMIND_STYLE_MAIN : XmindConstant.XMIND_STYLE_SUB)
+                    .addAttribute("style-id", hasNodeStyle(dataObj) ? "yuntu-node-" + dataObj.getString("id") : depth == 1 ? XmindConstant.XMIND_STYLE_MAIN : XmindConstant.XMIND_STYLE_SUB)
                     .addAttribute("imageTitle", dataObj.getString("imageTitle"));
 
-            JSONObject dataObj1 = dataObj.getJSONObject("imageSize");
-            String picPath = dataObj.getString("image");
-            if(picPath != null && picPath.length() != 0){
-                String targetPath = path  + "/attachments";
-
-                // 创建一个新的文件夹
-                File file = new File(targetPath);
-                if(!file.isDirectory()){
-                    file.mkdir();
-                }
-                try{
-                    String[] strs = picPath.split("/");
-                    int size = strs.length;
-                    String fileName = strs[size - 1];
-                    LOGGER.info("picPath路径为：" + picPath);
-                    LOGGER.info("outfile的内容为：" + file + "/" + fileName);
-
-                    if(dataObj1 != null && dataObj1.getString("width") != null){
-                        LOGGER.info("topic1的内容为：" + topic);
-                        LOGGER.info("dataonj1中有内容, 其中width：" + dataObj1.getString("width") + "  ，height：" + dataObj1.getString("height"));
-                        Element imageSize = topic.addElement("xhtml:img")
-                                .addAttribute("svg:height", dataObj1.getString("height"))
-                                .addAttribute("svg:width", dataObj1.getString("width"))
-                                .addAttribute("xhtml:src", "xap:attachments/" + fileName);
-
-                    }
-
-                    FileOutputStream outFile = new FileOutputStream(file + "/" + fileName);
-                    URL httpUrl=new URL(picPath);
-                    HttpURLConnection conn=(HttpURLConnection) httpUrl.openConnection();
-                    //以Post方式提交表单，默认get方式
-                    conn.setRequestMethod("GET");
-                    conn.setDoInput(true);
-                    conn.setDoOutput(true);
-                    // post方式不能使用缓存
-                    conn.setUseCaches(false);
-                    //连接指定的资源
-                    conn.connect();
-                    //获取网络输入流
-                    InputStream inputStream=conn.getInputStream();
-                    BufferedInputStream bis = new BufferedInputStream(inputStream);
-                    byte b [] = new byte[1024];
-                    int len = 0;
-                    while((len=bis.read(b))!=-1){
-                        outFile.write(b, 0, len);
-                    }
-                    LOGGER.info("下载完成...");
-                }
-                catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
+            exportImage(dataObj, topic, path, uploadPath);
 
             Element title = topic.addElement("title");
             String text = dataObj.getString("text");
@@ -455,8 +409,37 @@ public class TreeUtil {
             }
             JSONArray childChildren = ((JSONObject) o).getJSONArray("children");
             if (childChildren != null && childChildren.size() > 0) {
-                exportDataToXml(childChildren, topic, path, depth + 1);
+                exportDataToXml(childChildren, topic, path, depth + 1, uploadPath);
             }
+        }
+    }
+
+    public static boolean hasNodeStyle(JSONObject data) {
+        return data != null && (data.containsKey("color") || data.containsKey("font-size") || data.containsKey("font-family")
+                || data.containsKey("background") || data.containsKey("font-weight") || data.containsKey("font-style"));
+    }
+
+    public static void exportImage(JSONObject data, Element topic, String path, String uploadPath) {
+        String image = data == null ? null : data.getString("image");
+        if (image == null || image.isEmpty()) return;
+        try {
+            String uriPath = new URI(image).getPath();
+            Path uploadRoot = Paths.get(uploadPath).toAbsolutePath().normalize();
+            Path source = uploadRoot.resolve(uriPath.replaceFirst("^/", "")).normalize();
+            if (!source.startsWith(uploadRoot) || !Files.isRegularFile(source)) throw new IOException("图片文件不存在或路径非法");
+            Path attachments = Paths.get(path, "attachments");
+            Files.createDirectories(attachments);
+            String fileName = data.getString("id") + "-" + source.getFileName().toString();
+            Files.copy(source, attachments.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+            JSONObject size = data.getJSONObject("imageSize");
+            BufferedImage bitmap = ImageIO.read(source.toFile());
+            if (bitmap == null) throw new IOException("图片格式无效");
+            topic.addElement("xhtml:img")
+                    .addAttribute("svg:width", size != null && size.getString("width") != null ? size.getString("width") : String.valueOf(bitmap.getWidth()))
+                    .addAttribute("svg:height", size != null && size.getString("height") != null ? size.getString("height") : String.valueOf(bitmap.getHeight()))
+                    .addAttribute("xhtml:src", "xap:attachments/" + fileName);
+        } catch (Exception error) {
+            throw new IllegalStateException("导出图片失败：" + error.getMessage(), error);
         }
     }
 

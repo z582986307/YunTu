@@ -6,6 +6,8 @@ import moment from 'moment'
 import request from '@/utils/axios'
 import getQueryString from '@/utils/getCookies'
 import TaskModal from './taskModal'
+import resizableColumns from './resizableColumns'
+import './index.scss'
 
 class TaskList extends React.Component {
   constructor(props) {
@@ -17,6 +19,7 @@ class TaskList extends React.Component {
       editing: null, caseInfo: {}, ownerList: [], fetching: false,
       filters: { keyword: '', owner: '', dates: [] },
       draft: { keyword: '', owner: '', dates: [] },
+      columnWidths: {},
     }
   }
 
@@ -51,6 +54,8 @@ class TaskList extends React.Component {
   }
 
   changeDraft = update => this.setState(state => ({ draft: { ...state.draft, ...update } }))
+
+  resizeColumn = (key, width) => this.setState(state => ({ columnWidths: { ...state.columnWidths, [key]: width } }))
 
   openTask = record => {
     const username = getQueryString.getCookie('username') || ''
@@ -118,7 +123,7 @@ class TaskList extends React.Component {
     const { tasks, total, page, loading, editing, caseInfo, ownerList, fetching, draft } = this.state
     const columns = [
       { title: '测试任务 ID', dataIndex: 'id', key: 'id', width: 125 },
-      { title: '任务名称', dataIndex: 'title', key: 'title', render: (text, record) =>
+      { title: '任务名称', dataIndex: 'title', key: 'title', width: 360, render: (text, record) =>
         <a className="task-list-name" title={text} onClick={() => this.openTask(record)}>{text}</a> },
       { title: '所属用例 ID', dataIndex: 'caseId', key: 'caseId', width: 120,
         render: value => <Link to={`/caseManager/${this.props.productLineId}/${value}/undefined/0`}>{value}</Link> },
@@ -127,7 +132,7 @@ class TaskList extends React.Component {
         render: (_, record) => `${record.executeNum || 0} / ${record.totalNum || 0}` },
       { title: '创建时间', dataIndex: 'createTime', key: 'createTime', width: 180,
         render: value => value ? moment(value).format('YYYY-MM-DD HH:mm:ss') : '' },
-      { title: '操作', key: 'actions', width: 180, render: (_, record) => <span className="task-list-actions">
+      { title: '操作', key: 'actions', width: 180, fixed: 'right', render: (_, record) => <span className="task-list-actions">
         <Button type="link" onClick={() => this.openTask(record)}>执行</Button>
         <Button type="link" onClick={() => this.editTask(record)}>编辑</Button>
         <Button type="link" className="task-list-delete" onClick={() => this.deleteTask(record)}>删除</Button>
@@ -146,13 +151,13 @@ class TaskList extends React.Component {
           {ownerList.map(owner => <Select.Option key={owner} value={owner}>{owner}</Select.Option>)}
         </Select>
         <DatePicker.RangePicker aria-label="筛选创建时间"
-          placeholder={['创建时间', '结束时间']}
+          placeholder={['开始时间', '结束时间']}
           value={draft.dates.length === 2 && draft.dates.every(Boolean) ? draft.dates.map(date => moment(date, 'YYYY-MM-DD')) : null}
           onChange={(_, dates) => this.changeDraft({ dates: dates && dates.every(Boolean) ? dates : [] })} />
-        <Button type="primary" onClick={() => this.applyFilters(this.state.draft)}>筛选</Button>
+        <Button type="primary" onClick={() => this.applyFilters(this.state.draft)}>搜索</Button>
         <Button onClick={() => this.applyFilters({ keyword: '', owner: '', dates: [] })}>重置</Button>
       </div>
-      <Table columns={columns} dataSource={tasks} rowKey="id" loading={loading} pagination={false} scroll={{ x: 960 }}
+      <Table columns={resizableColumns(columns, this.state.columnWidths, this.resizeColumn)} dataSource={tasks} rowKey="id" loading={loading} pagination={false} scroll={{ x: 1235 }}
         locale={{ emptyText: '暂无测试任务，请先从用例列表创建任务' }} />
       {total > 0 && <Pagination current={page} total={total} pageSize={10} onChange={nextPage => this.loadPage(nextPage)} />}
       {editing && <TaskModal visible record={editing} caseInfo={caseInfo} ownerList={ownerList}

@@ -174,15 +174,13 @@ class CaseModal extends React.Component {
     }
     request(url, { method: 'POST', body: params }).then(res => {
       if (res.code == 200) {
-        message.success(
-          this.state.operate == 'add'
-            ? '新建测试用例成功'
-            : '复制测试用例成功',
-        );
-        if (this.state.operate === 'add') {
+        const created = this.state.operate === 'add';
+        if (created) {
           let urls = `${this.props.baseUrl}/caseManager/${this.props.productId}/${res.data}/undefined/0`;
           router.push(urls);
         }
+
+        setTimeout(() => message.success(created ? '新建测试用例成功' : '复制测试用例成功'), 0);
 
         this.props.onClose(false);
         this.props.onUpdate && this.props.onUpdate();

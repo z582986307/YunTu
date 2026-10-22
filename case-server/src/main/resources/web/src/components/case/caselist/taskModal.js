@@ -133,6 +133,7 @@ class TaskModal extends React.Component {
     }
     request(url, { method: 'POST', body: params }).then(res => {
       if (res.code === 200) {
+        message.success(this.props.titleModeTask === '编辑测试任务' ? '更新测试任务成功' : '新建测试任务成功');
         this.props.handleOkTask(this.props.record);
         this.setState({ choiseDate: [], radioValue: '' });
         this.props.form.resetFields();
