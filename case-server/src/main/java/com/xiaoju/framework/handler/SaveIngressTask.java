@@ -33,13 +33,28 @@ public class SaveIngressTask extends IngressTask {
 
     @Override
     public void run() {
+        if (backup && room instanceof RecordEntity) {
+            try {
+                ((RecordEntity) room).saveAppearance(data.getCaseContent(),
+                        client.getHandshakeData().getSingleUrlParam("user"));
+                acknowledgeSave("ok");
+            } catch (IllegalStateException conflict) {
+                LOGGER.warn("测试任务手动保存版本冲突", conflict);
+                acknowledgeSave("conflict");
+            } catch (Exception error) {
+                LOGGER.error("测试任务手动保存失败", error);
+                acknowledgeSave("error");
+            }
+            return;
+        }
         // 1.更新内存中的用例
         try {
             if (room instanceof RecordEntity) room.setCaseContent(data.getCaseContent());
             else room.acceptSaveContent(data.getCaseContent());
         } catch (Exception error) {
             LOGGER.error("保存内容格式错误", error);
-            acknowledgeSave("error");
+            acknowledgeSave(error instanceof IllegalStateException && error.getMessage() != null &&
+                    error.getMessage().contains("版本冲突") ? "conflict" : "error");
             return;
         }
         if (!(room instanceof RecordEntity)) {
@@ -47,7 +62,8 @@ public class SaveIngressTask extends IngressTask {
                 room.persistCaseContent(client.getHandshakeData().getSingleUrlParam("user"));
             } catch (Exception error) {
                 LOGGER.error("保存用例主数据失败", error);
-                acknowledgeSave("error");
+                acknowledgeSave(error instanceof IllegalStateException && error.getMessage() != null &&
+                        error.getMessage().contains("版本冲突") ? "conflict" : "error");
                 return;
             }
         }
@@ -101,7 +117,7 @@ public class SaveIngressTask extends IngressTask {
     }
 
     private void acknowledgeSave(String result) {
-        if (backup && !(room instanceof RecordEntity)) executorEgressService.submit(new AckEgressTask("save_ack_event",
+        if (backup) executorEgressService.submit(new AckEgressTask("save_ack_event",
                 PushMessage.builder().message(result).build(), client));
     }
 }

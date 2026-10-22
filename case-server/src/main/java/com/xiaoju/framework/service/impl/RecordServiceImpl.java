@@ -281,7 +281,8 @@ public class RecordServiceImpl implements RecordService {
         record.setTitle(req.getTitle());
         record.setCaseId(req.getCaseId());
         record.setIsDelete(NOT_DELETE);
-        record.setCaseContent(EMPTY_STR);
+        record.setCaseContent(com.xiaoju.framework.handler.RecordEntity.initialAppearanceRecord(
+                caseMapper.selectOne(req.getCaseId()).getCaseContent()));
         record.setCreator(req.getCreator());
         record.setModifier(EMPTY_STR);
         record.setGmtCreated(new Date());

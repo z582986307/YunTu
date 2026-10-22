@@ -646,6 +646,7 @@ class KityminderEditor extends Component {
       }
 
       if (patch.length > 0 && e.minder._status !== 'readonly') {
+        this.hasLocalEdits = true;
         // if (this.expectedBase !== e.minder.getBase()) {
         //   alert(
         //     `版本信息不对，请刷新页面重试。ExpBase: ${
@@ -1102,14 +1103,16 @@ class KityminderEditor extends Component {
   }
 
   saveCurrentCase = manual => {
-    if (!this.ws || !this.minder || this.props.readOnly) return;
+    if (!this.ws || !this.minder || (this.props.readOnly && !(manual && this.props.progressShow))) return;
+    if (manual && !this.props.readOnly) this.minder.fire('contentchange');
     clearTimeout(this.autoSaveTimer);
     if (this.expectedBase > this.minder.getBase()) {
       this.queuedSaveManual = Boolean(manual || this.queuedSaveManual);
       return;
     }
     if (manual) this.manualSavePending = true;
-    this.ws.sendMessage(manual ? 'save' : 'autosave', { caseContent: buildSaveContent(this.minder, window.minderData), patch: '', caseVersion: '' });
+    this.ws.sendMessage(manual ? 'save' : 'autosave', { caseContent: buildSaveContent(this.minder, window.minderData,
+      this.props.readOnly ? null : this.rawServerData, this.hasLocalEdits), patch: '', caseVersion: '' });
   };
 
   handleEditAck = () => {
@@ -1123,7 +1126,8 @@ class KityminderEditor extends Component {
   onButtonSave = () => this.saveCurrentCase(true);
 
   handleSaveAck = result => {
-    if (result !== 'ok') message.error('保存失败，请重试');
+    if (result === 'conflict') message.error('后台数据已变更，请刷新页面后重试');
+    else if (result !== 'ok') message.error('保存失败，请重试');
     else if (this.manualSavePending) message.success('保存成功');
     this.manualSavePending = false;
   };
@@ -1188,6 +1192,7 @@ class KityminderEditor extends Component {
               handleRedoAck={this.handleRedoAck}
               handleWsUserStat={this.handleWsUserStat}
               handleSaveAck={this.handleSaveAck}
+              handleServerSnapshot={(serialized, base) => { this.rawServerData = { serialized, base }; this.hasLocalEdits = false; }}
               handleEditAck={this.handleEditAck}
               // onError={e => {
               //   notification.info({

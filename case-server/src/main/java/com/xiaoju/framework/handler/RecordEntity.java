@@ -25,6 +25,10 @@ public class RecordEntity extends RoomEntity {
     Long recordId;
 //    ExecRecord execRecord;
     ExecRecordMapper recordMapper;
+    private JSONObject appearance;
+    private static final Set<String> APPEARANCE_FIELDS = new HashSet<>(Arrays.asList(
+            "font-size", "font-family", "font-weight", "font-style", "text-decoration",
+            "background", "color", "layout", "shape"));
 
     public RecordEntity(String roomId, Long caseId, TestCaseMapper caseMapper, Long recordId, ExecRecordMapper execRecordMapper) {
         super(roomId, caseId, caseMapper);
@@ -55,6 +59,7 @@ public class RecordEntity extends RoomEntity {
         JSONObject currentRoot = jsonObject.getJSONObject("content").getJSONObject("root");
         jsonProgress.put("__expandState", collectExpandState(currentRoot));
         jsonProgress.put("__notes", collectExecutionNotes(currentRoot));
+        if (appearance != null) jsonProgress.put("__appearance", appearance);
         Integer totalCount = jsonObject.getInteger("totalCount");
         Integer passCount = jsonObject.getInteger("passCount");
         Integer failCount = jsonObject.getInteger("failCount");
@@ -114,6 +119,14 @@ public class RecordEntity extends RoomEntity {
         } else {
             recordObj = JSON.parseObject(recordContent);
         }
+        appearance = recordObj.getJSONObject("__appearance");
+        if (appearance == null) {
+            // 旧任务没有外观快照：首次打开时锁定当前外观，以后不再跟随源用例变化。
+            appearance = captureAppearance(JSON.parseObject(caseContentStr));
+            recordObj.put("__appearance", appearance);
+            record.setCaseContent(recordObj.toJSONString());
+            execRecordMapper.update(record);
+        }
 
         IntCount ExecCount = new IntCount(recordObj.size());
         // 如果当前record是圈选了部分的圈选用例
@@ -149,7 +162,78 @@ public class RecordEntity extends RoomEntity {
             applyExecutionNotes(caseContent.getJSONObject("root"), recordObj.getJSONObject("__notes"));
             retCaseContent = caseContent.toJSONString();
         }
+        if (appearance != null) {
+            JSONObject content = JSON.parseObject(retCaseContent);
+            applyAppearance(content, appearance);
+            retCaseContent = content.toJSONString();
+        }
         return retCaseContent;
+    }
+
+    public synchronized void saveAppearance(String incomingContent, String user) {
+        JSONObject incoming = JSON.parseObject(incomingContent);
+        JSONObject current = JSON.parseObject(getCaseContent());
+        if (incoming == null || incoming.getJSONObject("root") == null ||
+                !Objects.equals(incoming.getInteger("base"), current.getInteger("base"))) {
+            throw new IllegalStateException("用例版本冲突，请刷新后重试");
+        }
+        JSONObject nextAppearance = captureAppearance(incoming);
+        applyAppearance(current, nextAppearance);
+        setCaseContent(current.toJSONString());
+        appearance = nextAppearance;
+        persistExecutionRecord(user);
+    }
+
+    public static String initialAppearanceRecord(String caseContent) {
+        JSONObject record = new JSONObject();
+        record.put("__appearance", captureAppearance(JSON.parseObject(caseContent)));
+        return record.toJSONString();
+    }
+
+    private static JSONObject captureAppearance(JSONObject content) {
+        JSONObject result = new JSONObject();
+        for (String key : Arrays.asList("theme", "template", "right")) {
+            if (content.containsKey(key)) result.put(key, content.get(key));
+        }
+        JSONObject nodes = new JSONObject();
+        Deque<JSONObject> pending = new ArrayDeque<>();
+        pending.push(content.getJSONObject("root"));
+        while (!pending.isEmpty()) {
+            JSONObject node = pending.pop();
+            JSONObject data = node.getJSONObject("data");
+            if (data != null && data.getString("id") != null) {
+                JSONObject style = new JSONObject();
+                for (String key : APPEARANCE_FIELDS) if (data.containsKey(key)) style.put(key, data.get(key));
+                nodes.put(data.getString("id"), style);
+            }
+            JSONArray children = node.getJSONArray("children");
+            if (children != null) for (Object child : children) pending.push((JSONObject) child);
+        }
+        result.put("nodes", nodes);
+        return result;
+    }
+
+    private void applyAppearance(JSONObject content, JSONObject saved) {
+        for (String key : Arrays.asList("theme", "template", "right")) {
+            if (saved.containsKey(key)) content.put(key, saved.get(key));
+        }
+        JSONObject nodes = saved.getJSONObject("nodes");
+        if (nodes == null) return;
+        Deque<JSONObject> pending = new ArrayDeque<>();
+        pending.push(content.getJSONObject("root"));
+        while (!pending.isEmpty()) {
+            JSONObject node = pending.pop();
+            JSONObject data = node.getJSONObject("data");
+            if (data != null && nodes.containsKey(data.getString("id"))) {
+                JSONObject style = nodes.getJSONObject(data.getString("id"));
+                for (String key : APPEARANCE_FIELDS) {
+                    if (style.containsKey(key)) data.put(key, style.get(key));
+                    else data.remove(key);
+                }
+            }
+            JSONArray children = node.getJSONArray("children");
+            if (children != null) for (Object child : children) pending.push((JSONObject) child);
+        }
     }
 
     private JSONObject collectExecutionNotes(JSONObject root) {

@@ -94,11 +94,11 @@ export const collectSelectedExecutionNodes = selectedNodes => {
 }
 export const normalizeRightMindMap = data => {
   if (!data || !data.root) return data
-  data.template = 'right'
-  data.theme = 'byte-blue'
+  if (!data.template) data.template = 'right'
+  if (!data.theme) data.theme = 'byte-blue'
   const setRight = node => {
     node.data = node.data || {}
-    node.data.layout = 'right'
+    if (!node.data.layout && data.template === 'right') node.data.layout = 'right'
     if (node.data.expandState == null) node.data.expandState = 'expand'
     const children = node.children || []
     children.forEach(child => {

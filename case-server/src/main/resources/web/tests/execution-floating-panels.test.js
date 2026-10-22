@@ -163,10 +163,9 @@ test('选择父级节点时只标记其下所有末级用例', () => {
   expect(collectSelectedExecutionNodes([group])).toEqual([first, second])
   expect(collectSelectedExecutionNodes([group, first])).toEqual([first, second])
 })
-test('用例默认使用向右逻辑图且所有层级不向左分叉', () => {
+test('缺失外观时使用默认主题并展开节点', () => {
   const data = {
-    template: 'fish-bone',
-    root: { data: {}, children: [{ data: { layout: 'left' }, children: [] }] },
+    root: { data: {}, children: [{ data: {}, children: [] }] },
   }
   expect(normalizeRightMindMap(data)).toBe(data)
   expect(data.template).toBe('right')
@@ -175,6 +174,14 @@ test('用例默认使用向右逻辑图且所有层级不向左分叉', () => {
   expect(data.root.children[0].data.layout).toBe('right')
   expect(data.root.data.expandState).toBe('expand')
   expect(data.root.children[0].data.expandState).toBe('expand')
+})
+test('重新打开时保留已保存的主题图形与节点布局', () => {
+  const data = { theme: 'ink-black', template: 'fish-bone',
+    root: { data: { layout: 'left' }, children: [{ data: { layout: 'left' }, children: [] }] } }
+  normalizeRightMindMap(data)
+  expect(data.theme).toBe('ink-black')
+  expect(data.template).toBe('fish-bone')
+  expect(data.root.children[0].data.layout).toBe('left')
 })
 test('切换思维导图后强制现有节点及后续子节点继承右向布局', () => {
   const layouts = []

@@ -8,6 +8,7 @@ import {
     isMindMapReady,
 } from './largeMindMap';
 import { normalizeRightMindMap } from './executionPanelUtils';
+import { shouldRecoverCachedContent } from './util/saveContent';
 // import { AsyncStorage } from 'react-native-community/async-storage';
 
 class Socket extends React.Component {
@@ -49,12 +50,14 @@ class Socket extends React.Component {
 
         websocket.on('open_event', async evt => {
             try {
-                let data = normalizeRightMindMap(JSON.parse(evt.message || '{}'));
+                const serverData = JSON.parse(evt.message || '{}');
+                if (typeof this.props.handleServerSnapshot === 'function') this.props.handleServerSnapshot(evt.message, serverData.base);
+                let data = normalizeRightMindMap(serverData);
                 const cacheKey = JSON.stringify(this.props.wsParam);
                 if (!this.isExecutionRecord()) {
                     try {
                         const cached = JSON.parse(localStorage.getItem(cacheKey));
-                        if (cached && cached.root && !(data.base > cached.base)) data = normalizeRightMindMap(cached);
+                        if (shouldRecoverCachedContent(data, cached)) data = normalizeRightMindMap(cached);
                     } catch (error) { /* 缓存损坏时使用服务端内容 */ }
                 }
                 window.minderData = undefined;
