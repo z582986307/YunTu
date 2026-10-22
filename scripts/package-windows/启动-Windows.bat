@@ -16,6 +16,7 @@ if errorlevel 1 goto start_failed
 echo.
 echo YunTu started successfully.
 echo Open http://127.0.0.1:8194 in your browser.
+echo HTTPS: https://127.0.0.1:8543 (self-signed certificate warning is expected).
 echo The service will keep running after this window closes.
 set /p "YUNTU_CLOSE=Press Enter to close this window..."
 exit /b 0

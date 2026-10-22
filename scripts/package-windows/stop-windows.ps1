@@ -12,9 +12,14 @@ function Get-ArgumentValue([string]$commandLine, [string]$name) {
 
 function Test-YunTuJar([string]$jarPath) {
   if (-not $jarPath -or -not [IO.Path]::IsPathRooted($jarPath)) { return $false }
-  return [IO.Path]::GetFileName($jarPath) -in @(
+  if ([IO.Path]::GetFileName($jarPath) -in @(
     'yuntu-server.jar', 'testcasemanage-server.jar', 'agiletc-server.jar'
-  )
+  )) { return $true }
+  $root = [IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($jarPath))
+  $folder = [IO.Path]::GetFileName($root)
+  return $folder -match '(?i)(云图|YunTu|TestCaseManage|AgileTC)' -and
+    (Test-Path -LiteralPath (Join-Path $root '停止-Windows.bat')) -and
+    (Test-Path -LiteralPath (Join-Path $root 'database\data'))
 }
 
 function Stop-YunTuDatabase($target) {
@@ -67,8 +72,8 @@ foreach ($process in $processes) {
     $expectedExe = Join-Path $packageRoot 'runtime\mariadb\bin\mariadbd.exe'
     if ($process.ExecutablePath -ine $expectedExe -or
         -not (Test-Path -LiteralPath (Join-Path $packageRoot '停止-Windows.bat')) -or
-        -not (@('yuntu-server.jar', 'testcasemanage-server.jar', 'agiletc-server.jar') |
-          Where-Object { Test-Path -LiteralPath (Join-Path $packageRoot $_) })) { continue }
+        -not (@(Get-ChildItem -LiteralPath $packageRoot -Filter '*.jar' -File -ErrorAction SilentlyContinue |
+          Where-Object { Test-YunTuJar $_.FullName }).Count -gt 0)) { continue }
     $secretFile = Join-Path $packageRoot 'database\db-secret.txt'
     $pidFile = Join-Path $packageRoot 'logs\database.pid'
     $admin = Join-Path $packageRoot 'runtime\mariadb\bin\mariadb-admin.exe'

@@ -66,10 +66,52 @@ $appInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
 $appInfo.EnvironmentVariables['SPRING_DATASOURCE_USERNAME'] = 'yuntu_app'
 $appInfo.EnvironmentVariables['SPRING_DATASOURCE_PASSWORD'] = $secret
 $appInfo.EnvironmentVariables['SPRING_DATASOURCE_URL'] = "jdbc:mysql://127.0.0.1:${dbPort}/case_manager?useSSL=false&useUnicode=true&characterEncoding=utf8&serverTimezone=GMT%2B8"
+$tlsRoot = Join-Path $runtimeRoot 'tls'
+$tlsStore = Join-Path $tlsRoot 'yuntu-self-signed.p12'
+$tlsSecretFile = Join-Path $tlsRoot 'tls-secret.txt'
+[IO.Directory]::CreateDirectory($tlsRoot) | Out-Null
+if ((Test-Path -LiteralPath $tlsStore) -ne (Test-Path -LiteralPath $tlsSecretFile)) {
+  throw '本地 HTTPS 证书或密码文件缺失，请恢复运行数据\本地服务\tls 的完整备份。'
+}
+if (-not (Test-Path -LiteralPath $tlsStore)) {
+  $random = New-Object byte[] 32
+  [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($random)
+  $tlsSecret = [Convert]::ToBase64String($random)
+  $addresses = @('ip:127.0.0.1', 'dns:localhost')
+  $addresses += @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254.*' } |
+    ForEach-Object { 'ip:' + $_.IPAddress })
+  $env:YUNTU_TLS_SECRET = $tlsSecret
+  try {
+    & (Join-Path (Split-Path $javaBin -Parent) 'keytool.exe') -genkeypair -alias yuntu `
+      -keyalg RSA -keysize 2048 -validity 825 -dname 'CN=YunTu' `
+      -keystore $tlsStore -storetype PKCS12 -storepass:env YUNTU_TLS_SECRET `
+      -keypass:env YUNTU_TLS_SECRET -ext ('SAN=' + (($addresses | Select-Object -Unique) -join ',')) -noprompt 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw '生成本地 HTTPS 证书失败。' }
+    ConvertTo-SecureString -String $tlsSecret -AsPlainText -Force |
+      ConvertFrom-SecureString | Set-Content -LiteralPath $tlsSecretFile -Encoding ASCII
+  } finally { Remove-Item Env:YUNTU_TLS_SECRET -ErrorAction SilentlyContinue }
+} else {
+  $secureTls = (Get-Content -LiteralPath $tlsSecretFile -Raw).Trim() | ConvertTo-SecureString
+  $tlsPointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureTls)
+  try { $tlsSecret = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($tlsPointer) }
+  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($tlsPointer) }
+}
+$appInfo.EnvironmentVariables['SERVER_SSL_ENABLED'] = 'true'
+$appInfo.EnvironmentVariables['SERVER_SSL_KEY_STORE'] = 'file:' + ($tlsStore -replace '\\','/')
+$appInfo.EnvironmentVariables['SERVER_SSL_KEY_STORE_TYPE'] = 'PKCS12'
+$appInfo.EnvironmentVariables['SERVER_SSL_KEY_ALIAS'] = 'yuntu'
+$appInfo.EnvironmentVariables['SERVER_SSL_KEY_STORE_PASSWORD'] = $tlsSecret
+$appInfo.EnvironmentVariables['SERVER_SSL_KEY_PASSWORD'] = $tlsSecret
 $appInfo.Arguments = '-Xms256m -Xmx2048m -jar "' + $jar + '" --server.port=8543 --http.port=' + $httpPort + ' --socketio.port=8195'
 $appProcess = [System.Diagnostics.Process]::Start($appInfo)
 $secret = $null
+$tlsSecret = $null
 [System.IO.File]::WriteAllText($appPidFile, [string]$appProcess.Id)
-for ($attempt = 0; $attempt -lt 90 -and -not (Test-LocalPort $httpPort); $attempt++) { Start-Sleep -Seconds 1 }
-if (-not (Test-LocalPort $httpPort)) { throw '本地服务启动超时，请检查运行数据\本地服务\logs。' }
+for ($attempt = 0; $attempt -lt 180 -and
+    (-not (Test-LocalPort $httpPort) -or -not (Test-LocalPort 8543)); $attempt++) {
+  if ($appProcess.HasExited) { throw '本地服务进程提前退出，请检查运行数据\本地服务\logs。' }
+  Start-Sleep -Seconds 1
+}
+if (-not (Test-LocalPort $httpPort) -or -not (Test-LocalPort 8543)) { throw '本地服务启动超时，请检查运行数据\本地服务\logs。' }
 Write-Output '本地生产服务已启动。'
