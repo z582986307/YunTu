@@ -5582,9 +5582,8 @@
               }
               this.count.setContent(node._collapsedLeafCount > 99 ? '...' : String(node._collapsedLeafCount));
               this.count.setVisible(true);
-              var fontSize = Number(node.getData('font-size') || node.getStyle('font-size')) || 12;
-              this.radius = Math.max(6, Math.min(10, Math.round(fontSize / 2)));
-              this.outline.setRadius(this.radius);
+              this.radius = 10;
+              this.outline.setRadius(10);
             } else {
               this.count.setVisible(false);
               this.radius = 6;
