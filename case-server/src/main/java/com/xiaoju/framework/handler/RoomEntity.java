@@ -26,6 +26,7 @@ public class RoomEntity {
     ObjectMapper jsonMapper;
     JsonNodeFactory FACTORY;
     ReentrantLock lock;
+    private final Map<UUID, Integer> lastForeignEditVersion = new HashMap<>();
 
     public RoomEntity(String roomId, Long caseId, TestCaseMapper caseMapper) {
         this.roomId = roomId;
@@ -42,15 +43,15 @@ public class RoomEntity {
         }
     }
 
-    public void addClient(SocketIOClient client) {
-
+    public synchronized void addClient(SocketIOClient client) {
+        if (this.clientMap.isEmpty() && this.lockClient == null) this.lockClient = client;
         this.clientMap.put(client.getSessionId(), client.getHandshakeData().getSingleUrlParam("user"));
         LOGGER.info("add client, current user number:" + this.clientMap.size() + ", name: " + client.getHandshakeData().getSingleUrlParam("user"));
 
     }
 
-    public void removeClient(SocketIOClient client) {
-        this.clientMap.remove(client.getSessionId());
+    public synchronized void removeClient(SocketIOClient client) {
+        forgetClient(client);
         LOGGER.info("remove client, current user number:" + this.clientMap.size());
         if (this.clientMap.size() == 0) {
             try {
@@ -59,6 +60,11 @@ public class RoomEntity {
                 LOGGER.error("离开页面时保存用例失败", e);
             }
         }
+    }
+
+    protected void forgetClient(SocketIOClient client) {
+        this.clientMap.remove(client.getSessionId());
+        this.lastForeignEditVersion.remove(client.getSessionId());
     }
 
     public synchronized boolean persistCaseContent(String modifier) throws Exception {
@@ -108,6 +114,16 @@ public class RoomEntity {
 
     public void unlock() {
 //        this.lock.unlock();
+    }
+
+    public void noteAcceptedEdit(UUID editor, int version) {
+        for (UUID participant : clientMap.keySet()) {
+            if (!participant.equals(editor)) lastForeignEditVersion.put(participant, version);
+        }
+    }
+
+    public boolean hasForeignEditSince(UUID participant, int version) {
+        return lastForeignEditVersion.getOrDefault(participant, 0) > version;
     }
 
     public String getRoomId() {

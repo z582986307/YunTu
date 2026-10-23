@@ -4,6 +4,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.Consumer;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -93,6 +94,12 @@ public class SocketIOServiceImpl implements SocketIOService {
     public void start() {
         // 监听客户端连接
         socketIOServer.addConnectListener(client -> {
+            if (!PageBuildVersion.matches(PageBuildVersion.current(),
+                    client.getHandshakeData().getSingleUrlParam("build"))) {
+                client.sendEvent("platform_update_event", PushMessage.builder().message("refresh").build());
+                client.disconnect();
+                return;
+            }
             ClientEntity clientEntity = getRoomFromClient(client);
             String roomId = clientEntity.getRoomId();
             if (null == clientEntity.getRecordId()) {
@@ -103,7 +110,9 @@ public class SocketIOServiceImpl implements SocketIOService {
                 LOGGER.info("add case client room map size: " + clientRoomMap.keySet().size());
                 executorEgressService.submit(new AckEgressTask("open_event",
                         PushMessage.builder().message(roomEntity.getCaseContent()).build(), client));
-                if (roomEntity.isLockedByClient()) {
+                if (roomEntity.lockByClient(client)) {
+                    executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("4").build(), client));
+                } else if (roomEntity.isLockedByClient()) {
                     LOGGER.info("add client, case is locked by others");
                     executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
                 }
@@ -122,7 +131,9 @@ public class SocketIOServiceImpl implements SocketIOService {
                 executorEgressService.submit(new AckEgressTask("open_event",
                         PushMessage.builder().message(recordEntity.getCaseContent()).build(), client));
 
-                if (recordEntity.isLockedByClient()) {
+                if (recordEntity.lockByClient(client)) {
+                    executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("4").build(), client));
+                } else if (recordEntity.isLockedByClient()) {
                     LOGGER.info("add client, record is locked by others");
                     executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
                 }
@@ -138,6 +149,8 @@ public class SocketIOServiceImpl implements SocketIOService {
 
         // 监听客户端断开连接
         socketIOServer.addDisconnectListener(client -> {
+
+            if (!clientRoomMap.containsKey(client)) return;
 
             ClientEntity clientEntity = getRoomFromClient(client);
             String roomId = clientEntity.getRoomId();
@@ -182,40 +195,82 @@ public class SocketIOServiceImpl implements SocketIOService {
 
         // 处理自定义的事件，与连接监听类似,event为事件名，PushMessage为参数实体类　　　　 // 监听前端发送的事件
         socketIOServer.addEventListener("edit", EditMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new EditIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService, data));
+            RoomEntity room = clientRoomMap.get(client);
+            if (room == null) return;
+            executorIngressService.submit(new EditIngressTask(client, socketIOServer, room, executorEgressService, data));
+        });
+
+        socketIOServer.addEventListener("state_check", PushMessage.class, (client, data, ackSender) -> {
+            executorIngressService.submit(() -> {
+                RoomEntity room = clientRoomMap.get(client);
+                if (room == null) return;
+                synchronized (room) {
+                    try {
+                        int base = jsonMapper.readTree(room.getCaseContent()).path("base").asInt();
+                        executorEgressService.submit(new AckEgressTask("state_check_event",
+                                PushMessage.builder().message(String.valueOf(base)).build(), client));
+                    } catch (Exception error) {
+                        LOGGER.warn("无法检查当前页面数据版本", error);
+                    }
+                }
+            });
         });
 
         socketIOServer.addEventListener("case_design_event", CaseDesignMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new CaseDesignIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService, data));
+            submitRoomWrite(client, room -> new CaseDesignIngressTask(client, socketIOServer, room, executorEgressService, data).run());
         });
 
         socketIOServer.addEventListener("lock", PushMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new LockIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService, data));
+            executorIngressService.submit(() -> {
+                RoomEntity room = clientRoomMap.get(client);
+                if (room == null) return;
+                synchronized (room) {
+                    new LockIngressTask(client, socketIOServer, room, executorEgressService, data).run();
+                }
+            });
         });
 
         socketIOServer.addEventListener("undo", PushMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new UndoIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService, data));
+            submitRoomWrite(client, room -> new UndoIngressTask(client, socketIOServer, room, executorEgressService, data).run());
         });
 
         socketIOServer.addEventListener("redo", PushMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new RedoIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService, data));
+            submitRoomWrite(client, room -> new RedoIngressTask(client, socketIOServer, room, executorEgressService, data).run());
         });
 
         socketIOServer.addEventListener("save", EditMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new SaveIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService, data, caseBackupMapper));
+            RoomEntity room = clientRoomMap.get(client);
+            if (room == null) return;
+            executorIngressService.submit(new SaveIngressTask(client, socketIOServer, room, executorEgressService, data, caseBackupMapper));
         });
 
         socketIOServer.addEventListener("autosave", EditMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new SaveIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService, data, caseBackupMapper, false));
+            RoomEntity room = clientRoomMap.get(client);
+            if (room == null) return;
+            executorIngressService.submit(new SaveIngressTask(client, socketIOServer, room, executorEgressService, data, caseBackupMapper, false));
         });
 
         socketIOServer.addEventListener("record_clear", EditMessage.class, (client, data, ackSender) -> {
-            executorIngressService.submit(new RecordClearIngressTask(client, socketIOServer, clientRoomMap.get(client), executorEgressService));
+            submitRoomWrite(client, room -> new RecordClearIngressTask(client, socketIOServer, room, executorEgressService).run());
         });
 
         socketIOServer.start();
 
         LOGGER.info("socket server start.");
+    }
+
+    private void submitRoomWrite(SocketIOClient client, Consumer<RoomEntity> operation) {
+        executorIngressService.submit(() -> {
+            RoomEntity room = clientRoomMap.get(client);
+            if (room == null) return;
+            synchronized (room) {
+                if (room.isLockedByClient() && !room.lockByClient(client)) {
+                    executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+                    return;
+                }
+                operation.accept(room);
+            }
+        });
     }
 
     @Override

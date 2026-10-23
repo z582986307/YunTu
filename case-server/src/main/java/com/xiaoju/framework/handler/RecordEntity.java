@@ -41,8 +41,8 @@ public class RecordEntity extends RoomEntity {
     }
 
     @Override
-    public void removeClient(SocketIOClient client) {
-        this.clientMap.remove(client.getSessionId());
+    public synchronized void removeClient(SocketIOClient client) {
+        forgetClient(client);
         LOGGER.info("remove client, current user number:" + this.clientMap.size());
         String user = client.getHandshakeData().getSingleUrlParam("user");
         persistExecutionRecord(user);

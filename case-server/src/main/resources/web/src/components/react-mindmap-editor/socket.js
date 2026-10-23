@@ -9,6 +9,7 @@ import {
 } from './largeMindMap';
 import { normalizeRightMindMap } from './executionPanelUtils';
 import { shouldRecoverCachedContent } from './util/saveContent';
+import { bundlePathFromHtml, isConfirmedDataStale } from './pageFreshness';
 // import { AsyncStorage } from 'react-native-community/async-storage';
 
 class Socket extends React.Component {
@@ -16,7 +17,15 @@ class Socket extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            ws: io(this.props.url, { ...props.wsParam, autoConnect: false }),
+            ws: io(this.props.url, {
+                ...props.wsParam,
+                query: {
+                    ...props.wsParam.query,
+                    build: bundlePathFromHtml(Array.from(document.scripts || [])
+                        .map(script => `<script src="${script.getAttribute('src') || ''}"></script>`).join('')),
+                },
+                autoConnect: false,
+            }),
         };
         this.sendMessage = this.sendMessage.bind(this);
         this.setupSocket = this.setupSocket.bind(this);
@@ -32,13 +41,16 @@ class Socket extends React.Component {
 
         websocket.on ('reconnect', () => {
             websocket.disconnect();
-            notification.error({ message: 'Version of client is not equal to server, please refresh.'});
         });
 
-        websocket.on('disconnect', () => {
-            if (typeof this.props.onClose === 'function') this.props.onClose();
+        websocket.on('disconnect', async () => {
+            if (this.unmounted) return;
+            const changed = await this.checkDeploymentVersion();
+            if (this.unmounted) return;
+            if (changed && typeof this.props.handlePlatformUpdate === 'function') this.props.handlePlatformUpdate();
+            else if (typeof this.props.onClose === 'function') this.props.onClose();
             console.log('disconnect happened.')
-            if (!this.isExecutionRecord() && isMindMapReady(this.props.wsMinder)) {
+            if (!this.skipCache && !this.isExecutionRecord() && isMindMapReady(this.props.wsMinder)) {
                 localStorage.setItem(JSON.stringify(this.props.wsParam), JSON.stringify(this.props.wsMinder.exportJson()));
             }
         });
@@ -76,6 +88,24 @@ class Socket extends React.Component {
             if (typeof this.props.handleSaveAck === 'function') this.props.handleSaveAck(evt.message);
         });
 
+        websocket.on('stale_data_event', () => {
+            if (typeof this.props.handleDataStale === 'function') this.props.handleDataStale();
+        });
+
+        websocket.on('platform_update_event', () => {
+            if (typeof this.props.handlePlatformUpdate === 'function') this.props.handlePlatformUpdate();
+        });
+
+        websocket.on('state_check_event', async evt => {
+            if (!(await this.waitForImport())) return;
+            if (this.props.isOwnEditPending && this.props.isOwnEditPending()) {
+                this.checkAfterEditAck = true;
+                return;
+            }
+            if (isConfirmedDataStale(this.props.wsMinder.getBase(), Number(evt.message)) &&
+                typeof this.props.handleDataStale === 'function') this.props.handleDataStale();
+        });
+
         websocket.on('edit_ack_event', async evt => {
             if (!(await this.waitForImport())) return;
             const recv = JSON.parse(evt.message || '{}');
@@ -87,6 +117,10 @@ class Socket extends React.Component {
             try {
                 this.props.wsMinder.applyPatches(recvPatches);
                 if (typeof this.props.handleEditAck === 'function') this.props.handleEditAck();
+                if (this.checkAfterEditAck) {
+                    this.checkAfterEditAck = false;
+                    this.requestStateCheck();
+                }
             } catch(e) {
                 alert('客户端接受应答消息异常，请刷新重试');
             }
@@ -169,6 +203,35 @@ class Socket extends React.Component {
         return patches;
     };
 
+    checkDeploymentVersion = async () => {
+        const current = bundlePathFromHtml(Array.from(document.scripts || [])
+            .map(script => `<script src="${script.getAttribute('src') || ''}"></script>`).join(''));
+        if (!current) return false;
+        try {
+            const response = await fetch(`/?freshness=${Date.now()}`, { cache: 'no-store', credentials: 'same-origin' });
+            if (!response.ok) return false;
+            const latest = bundlePathFromHtml(await response.text());
+            return Boolean(latest && latest !== current);
+        } catch (error) {
+            return false;
+        }
+    };
+
+    requestStateCheck = () => {
+        if (this.state.ws.connected && isMindMapReady(this.props.wsMinder) && !this.skipCache) {
+            this.sendMessage('state_check', { message: '' });
+        }
+    };
+
+    checkFreshness = async () => {
+        if (this.unmounted || this.skipCache || document.hidden) return;
+        if (await this.checkDeploymentVersion()) {
+            if (typeof this.props.handlePlatformUpdate === 'function') this.props.handlePlatformUpdate();
+            return;
+        }
+        this.requestStateCheck();
+    };
+
     sendMessage(type, message) {
         let websocket = this.state.ws;
         // var jsonObject = {userName: 'userName', message: message};
@@ -183,7 +246,7 @@ class Socket extends React.Component {
     leaveListener(e) {
         e.preventDefault();
         e.returnValue = '内容将被存储到缓存，下次打开相同用例优先从缓存获取！';
-        if (!this.isExecutionRecord() && isMindMapReady(this.props.wsMinder) && this.props.wsMinder.getBase() > 16) {
+        if (!this.skipCache && !this.isExecutionRecord() && isMindMapReady(this.props.wsMinder) && this.props.wsMinder.getBase() > 16) {
             localStorage.setItem(JSON.stringify(this.props.wsParam), JSON.stringify(this.props.wsMinder.exportJson()));
         }
     }
@@ -193,12 +256,16 @@ class Socket extends React.Component {
         this.setupSocket();
         this.state.ws.connect();
         window.addEventListener('beforeunload', this.leaveListener);
+        window.addEventListener('focus', this.checkFreshness);
+        document.addEventListener('visibilitychange', this.checkFreshness);
     }
 
     componentWillUnmount() {
         this.unmounted = true;
         cancelMindMapImport(this.props.wsMinder);
         window.removeEventListener('beforeunload', this.leaveListener);
+        window.removeEventListener('focus', this.checkFreshness);
+        document.removeEventListener('visibilitychange', this.checkFreshness);
 
         this.state.ws.disconnect();
         console.log(' -- componentWillUnmount -- ');

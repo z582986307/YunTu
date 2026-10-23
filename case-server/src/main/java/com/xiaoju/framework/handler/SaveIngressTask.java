@@ -33,6 +33,17 @@ public class SaveIngressTask extends IngressTask {
 
     @Override
     public void run() {
+        synchronized (room) {
+            saveLocked();
+        }
+    }
+
+    private void saveLocked() {
+        if (room.isLockedByClient() && !room.lockByClient(client)) {
+            executorEgressService.submit(new AckEgressTask("lock",
+                    PushMessage.builder().message("0").build(), client));
+            return;
+        }
         if (backup && room instanceof RecordEntity) {
             try {
                 ((RecordEntity) room).saveAppearance(data.getCaseContent(),
@@ -117,7 +128,7 @@ public class SaveIngressTask extends IngressTask {
     }
 
     private void acknowledgeSave(String result) {
-        if (backup) executorEgressService.submit(new AckEgressTask("save_ack_event",
+        if (backup || "conflict".equals(result)) executorEgressService.submit(new AckEgressTask("save_ack_event",
                 PushMessage.builder().message(result).build(), client));
     }
 }

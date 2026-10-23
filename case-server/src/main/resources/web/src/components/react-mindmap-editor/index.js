@@ -41,7 +41,6 @@ import { NavBar } from './components';
 import { preview, editInput, clipboardRuntime } from './util';
 import { waitForNewNodeLayout } from './util/editInput';
 import {
-  getLockStatusLabel,
   expandAllExecutionNodes,
   normalizeRightMindMap,
   buildNodeDataPatches,
@@ -500,6 +499,7 @@ class KityminderEditor extends Component {
   //   this.setState({ undoCnt: undoCnt + 1, redoCnt: redoCnt - 1 });
   // };
   handleKeyDown = event => {
+    if (this.pageBlocked) return;
     const e = event;
     const ctrlKey = e.metaKey || e.ctrlKey;
     const hasModal =
@@ -629,6 +629,7 @@ class KityminderEditor extends Component {
     }
   };
   sendPatch = e => {
+    if (this.pageBlocked) return;
     if (this.minder._progressiveImporting || this.minder._mindMapImportFailed) return;
     if (this.skipNextContentChange) {
       this.skipNextContentChange = false;
@@ -651,6 +652,7 @@ class KityminderEditor extends Component {
 
       if (patch.length > 0 && e.minder._status !== 'readonly') {
         this.hasLocalEdits = true;
+        this.pendingEditCount = (this.pendingEditCount || 0) + 1;
         // if (this.expectedBase !== e.minder.getBase()) {
         //   alert(
         //     `版本信息不对，请刷新页面重试。ExpBase: ${
@@ -753,6 +755,7 @@ class KityminderEditor extends Component {
   };
   handleWsClose = e => {
     this.setState({ wsConnected: false, nowUseList: [] });
+    if (this.pageBlocked) return;
     // if (this.props.onClose) {
     //   this.props.onClose(this.minder.exportJson());
     // }
@@ -907,12 +910,18 @@ class KityminderEditor extends Component {
         break;
 
       case '2':
-          notification.success({ message: '加/解锁成功' });
-          this.setState({ locked: !this.state.locked });
+          notification.success({ message: this.pendingLockState ? '锁定成功' : '解锁成功' });
+          this.setState({ locked: Boolean(this.pendingLockState) });
+          this.pendingLockState = undefined;
+        break;
+
+      case '4':
+          this.setState({ locked: true });
         break;
 
       case '3':
           notification.error({ message: '加/解锁失败' });
+          this.pendingLockState = undefined;
           break;
     }
   }
@@ -927,10 +936,12 @@ class KityminderEditor extends Component {
   }
 
   handleLockToggle = checked => {
+    if (this.pageBlocked) return;
     if (!this.ws || typeof this.ws.sendMessage !== 'function') {
       notification.error({ message: '锁定服务未连接，请稍后重试' });
       return;
     }
+    this.pendingLockState = checked;
     this.ws.sendMessage('lock', { message: checked ? 'lock' : 'unlock' });
   };
   prepareNodeInput = () => {
@@ -970,6 +981,7 @@ class KityminderEditor extends Component {
     editInput(node, this.inputNode);
   };
   handleExecutionChange = (field, nodes, value, apply) => {
+    if (this.pageBlocked) return;
     const patches = buildNodeDataPatches(nodes.filter(Boolean), field, value);
     if (!patches.length) return;
     const inversePatches = invertNodeDataPatches(patches);
@@ -979,6 +991,7 @@ class KityminderEditor extends Component {
       this.groupNode.recordDirectChange(patches, inversePatches);
     }
     const currentBase = this.minder.getBase();
+    this.pendingEditCount = (this.pendingEditCount || 0) + 1;
     this.ws.sendMessage('edit', {
       caseContent: '',
       patch: JSON.stringify([toWirePatches(patches)]),
@@ -1115,6 +1128,7 @@ class KityminderEditor extends Component {
   }
 
   saveCurrentCase = manual => {
+    if (this.pageBlocked) return;
     if (!this.ws || !this.minder || (this.props.readOnly && !(manual && this.props.progressShow))) return;
     if (manual && !this.props.readOnly) this.minder.fire('contentchange');
     clearTimeout(this.autoSaveTimer);
@@ -1128,6 +1142,7 @@ class KityminderEditor extends Component {
   };
 
   handleEditAck = () => {
+    this.pendingEditCount = Math.max(0, (this.pendingEditCount || 0) - 1);
     if (this.queuedSaveManual !== undefined && this.expectedBase <= this.minder.getBase()) {
       const manual = this.queuedSaveManual;
       this.queuedSaveManual = undefined;
@@ -1138,11 +1153,37 @@ class KityminderEditor extends Component {
   onButtonSave = () => this.saveCurrentCase(true);
 
   handleSaveAck = result => {
-    if (result === 'conflict') message.error('后台数据已变更，请刷新页面后重试');
+    if (result === 'conflict') this.handleDataStale();
     else if (result !== 'ok') message.error('保存失败，请重试');
     else if (this.manualSavePending) message.success('保存成功');
     this.manualSavePending = false;
   };
+
+  blockUntilRefresh = text => {
+    if (this.pageBlocked) return;
+    this.pageBlocked = true;
+    clearTimeout(this.autoSaveTimer);
+    if (this.ws) {
+      this.ws.skipCache = true;
+      localStorage.removeItem(JSON.stringify(this.props.wsParam));
+    }
+    if (this.minder) this.minder.setStatus('readonly');
+    if (this.modal) this.modal.destroy();
+    this.modal = Modal.warning({
+      title: text,
+      className: 'yuntu-modal ws-warning',
+      okText: '确定',
+      keyboard: false,
+      maskClosable: false,
+      onOk: () => location.reload(),
+    });
+  };
+
+  handlePlatformUpdate = () => this.blockUntilRefresh('平台已更新，请刷新页面后继续');
+
+  handleDataStale = () => this.blockUntilRefresh(this.props.progressShow
+    ? '当前任务数据已变更，请刷新后重试'
+    : '当前用例数据已变更，请刷新后重试');
 
   render() {
     const {
@@ -1204,6 +1245,9 @@ class KityminderEditor extends Component {
               handleRedoAck={this.handleRedoAck}
               handleWsUserStat={this.handleWsUserStat}
               handleSaveAck={this.handleSaveAck}
+              handlePlatformUpdate={this.handlePlatformUpdate}
+              handleDataStale={this.handleDataStale}
+              isOwnEditPending={() => (this.pendingEditCount || 0) > 0}
               handleServerSnapshot={(serialized, base) => { this.rawServerData = { serialized, base }; this.hasLocalEdits = false; }}
               handleEditAck={this.handleEditAck}
               // onError={e => {
@@ -1278,15 +1322,17 @@ class KityminderEditor extends Component {
                 </Popover>,
                 <Tooltip
                   key="lock"
-                  title={getLockStatusLabel(isLock || locked)}
+                  title={isLock ? '其他页面已锁定' : (locked ? '点击解锁' : '点击锁定')}
                   getPopupContainer={triggerNode => triggerNode.parentNode}
                 >
                   {type !== 'compare' && (
                     <Switch
                       size="small"
+                      aria-label={isLock ? '其他页面已锁定' : (locked ? '解锁' : '锁定')}
                       checkedChildren={<Icon type="lock" />}
                       unCheckedChildren={<Icon type="unlock" />}
                       checked={isLock || locked}
+                      disabled={isLock}
                       onChange={this.handleLockToggle}
                       className="yuntu-lock"
                     />

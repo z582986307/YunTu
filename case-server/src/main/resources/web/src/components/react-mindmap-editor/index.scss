@@ -188,6 +188,14 @@
   width: auto;
   background: transparent;
   box-shadow: none;
+
+  &:hover {
+    border-color: #2b87e6;
+  }
+
+  &:focus {
+    box-shadow: 0 0 0 3px rgba(43, 135, 230, .16);
+  }
   &.direct-replace {
     opacity: 0;
   }
@@ -326,7 +334,21 @@
   background: #fff;
 }
 .yuntu-lock.ant-switch {
-  background-color: #61c663;
+  min-width: 38px;
+  height: 22px;
+  border: 1px solid #b8d7f5;
+  border-radius: 11px;
+  background-color: #f3f8ff;
+  box-shadow: none;
+
+  &::after {
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(31, 91, 157, .2);
+  }
 
   .ant-switch-inner {
     display: flex;
@@ -338,11 +360,23 @@
     .anticon {
       display: block;
       line-height: 1;
+      color: #2b87e6;
+      font-size: 12px;
     }
   }
 
   &.ant-switch-checked {
-    background-color: #ff6a70;
+    border-color: #2b87e6;
+    background-color: #2b87e6;
+
+    &::after {
+      left: 100%;
+      margin-left: -18px;
+    }
+
+    .ant-switch-inner .anticon {
+      color: #fff;
+    }
   }
 }
 .mindmap-online-button.ant-btn-primary {

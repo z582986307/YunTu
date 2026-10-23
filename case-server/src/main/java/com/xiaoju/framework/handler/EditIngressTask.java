@@ -25,14 +25,23 @@ public class EditIngressTask extends IngressTask {
 
     @Override
     public void run() {
+        synchronized (room) {
+            applyEdit();
+        }
+    }
+
+    private void applyEdit() {
         room.lock();
-        LOGGER.info(data.getPatch());
         ClientEntity clientEntity = getRoomFromClient(client);
         String roomId = clientEntity.getRoomId();
 
         BroadcastOperations broadcastOperations = socketIOServer.getRoomOperations(roomId);
 
         try {
+            if (room.isLockedByClient() && !room.lockByClient(client)) {
+                executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+                return;
+            }
             ArrayNode patch = (ArrayNode) jsonMapper.readTree(data.getPatch());
             JsonNode roomContent = jsonMapper.readTree(room.getCaseContent());
             int serverCaseCurrentVersion = roomContent.get("base").asInt();
@@ -46,44 +55,47 @@ public class EditIngressTask extends IngressTask {
             patchNew.add(basePatch);
 
             JsonNode roomContentNew;
+            ArrayNode patchAck;
 
             boolean patchOnly = data.getCaseContent() == null || data.getCaseContent().isEmpty();
+            if (serverCaseCurrentVersion < data.getCaseVersion() ||
+                    (serverCaseCurrentVersion > data.getCaseVersion() &&
+                            room.hasForeignEditSince(client.getSessionId(), data.getCaseVersion()))) {
+                LOGGER.warn("拒绝落后页面的编辑. server: {}, client: {}", serverCaseCurrentVersion, data.getCaseVersion());
+                executorEgressService.submit(new AckEgressTask("stale_data_event",
+                        PushMessage.builder().message("stale").build(), client));
+                return;
+            }
             if (patchOnly) {
-                if (serverCaseCurrentVersion != data.getCaseVersion()) {
-                    LOGGER.warn("patch-only edit version conflict. server: " + serverCaseCurrentVersion + ", client: " + data.getCaseVersion());
-                    executorEgressService.submit(new AckEgressTask("warning", PushMessage.builder().message("编辑版本冲突，请刷新重试.").build(), client));
-                    return;
-                }
                 roomContentNew = JsonPatch.apply(patchNew, roomContent);
-                ArrayNode patchAck = FACTORY.arrayNode();
+                patchAck = FACTORY.arrayNode();
                 patchAck.add(basePatch);
-                executorEgressService.submit(new AckEgressTask("edit_ack_event", PushMessage.builder().message(patchAck.toString()).build(), client));
-                executorEgressService.submit(new NotifyExcludeEgressTask("edit_notify_event", PushMessage.builder().message(patchNew.toString()).build(), client, broadcastOperations));
-            } else if (serverCaseCurrentVersion > data.getCaseVersion()) { // 服务端版本大于前端
+            } else if (serverCaseCurrentVersion > data.getCaseVersion()) { // 同一标签尚未收到前一次编辑应答
                 LOGGER.warn("version of case in memory is bigger than client. version is: " + roomContent.get("base").asInt() + ", client version: " + data.getCaseVersion());
                 roomContentNew = JsonPatch.apply(patchNew, roomContent);
 
-                ArrayNode patchAck = (ArrayNode) JsonDiff.asJson(jsonMapper.readTree(data.getCaseContent()), roomContentNew, EnumSet.of(ADD_ORIGINAL_VALUE_ON_REPLACE, OMIT_MOVE_OPERATION));
-                executorEgressService.submit(new AckEgressTask("edit_ack_event", PushMessage.builder().message(patchAck.toString()).build(), client));
-                executorEgressService.submit(new NotifyExcludeEgressTask("edit_notify_event", PushMessage.builder().message(patchNew.toString()).build(), client, broadcastOperations));
+                patchAck = (ArrayNode) JsonDiff.asJson(jsonMapper.readTree(data.getCaseContent()), roomContentNew, EnumSet.of(ADD_ORIGINAL_VALUE_ON_REPLACE, OMIT_MOVE_OPERATION));
 //                    client.sendEvent("edit_ack_event", PushMessage.builder().message(patchAck.toString()).build(), PushMessage.builder().message(patchNew.toString()).build());
 //                    broadcastOperations.sendEvent("edit_notify_event", client, PushMessage.builder().message(patchNew.toString()).build());
-            } else { // 服务端版本小于等于前端，中间链接断开，导致变更未传递到后端
-                LOGGER.warn("version of case in memory is smaller than client. version is: " + roomContent.get("base").asInt() + ", client version: " + data.getCaseVersion());
-                // todo：为避免丢失，此处应该先保存客户端的case
-                String clientExceptContent = data.getCaseContent().replace("\"base\":" + data.getCaseVersion(), "\"base\":" + (data.getCaseVersion() + 1));
-                roomContentNew = jsonMapper.readTree(clientExceptContent);
-                ArrayNode patchNotify = (ArrayNode) JsonDiff.asJson(roomContent, jsonMapper.readTree(clientExceptContent), EnumSet.of(ADD_ORIGINAL_VALUE_ON_REPLACE, OMIT_MOVE_OPERATION));
-                executorEgressService.submit(new AckEgressTask("edit_ack_event", PushMessage.builder().message("[[{\"op\":\"replace\",\"path\":\"/base\",\"value\":" + (data.getCaseVersion() + 1) + "}]]").build(), client));
-                executorEgressService.submit(new NotifyExcludeEgressTask("edit_notify_event", PushMessage.builder().message(patchNotify.toString()).build(), client, broadcastOperations));
-
+            } else { // 版本相同，只应用本次补丁，不用客户端快照覆盖其他数据
+                roomContentNew = JsonPatch.apply(patchNew, roomContent);
+                patchAck = FACTORY.arrayNode();
+                patchAck.add(basePatch);
             }
 
             room.setCaseContent(roomContentNew.toString());
-            if (room instanceof RecordEntity) {
-                String user = client.getHandshakeData().getSingleUrlParam("user");
-                ((RecordEntity) room).persistExecutionRecord(user);
+            try {
+                if (room instanceof RecordEntity) {
+                    String user = client.getHandshakeData().getSingleUrlParam("user");
+                    ((RecordEntity) room).persistExecutionRecord(user);
+                }
+            } catch (Exception error) {
+                room.setCaseContent(roomContent.toString());
+                throw error;
             }
+            room.noteAcceptedEdit(client.getSessionId(), serverCaseExpectVersion);
+            executorEgressService.submit(new AckEgressTask("edit_ack_event", PushMessage.builder().message(patchAck.toString()).build(), client));
+            executorEgressService.submit(new NotifyExcludeEgressTask("edit_notify_event", PushMessage.builder().message(patchNew.toString()).build(), client, broadcastOperations));
 
         } catch (Exception e) {
             LOGGER.error("json 操作失败。", e);

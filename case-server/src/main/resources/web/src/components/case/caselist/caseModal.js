@@ -16,7 +16,7 @@ import {
 const { Dragger } = Upload;
 import './index.scss';
 import caseTemplate from './testcase-template.xlsx'
-import { fileTitle } from './formDefaults'
+import { fileTitle, copyCaseTitle } from './formDefaults'
 const initData = `{"root":{"data":{"id":"bv8nxhi3c800","created":1562059643204,"text":"中心主题"},"children":[]},"template":"default","theme":"fresh-blue","version":"1.4.43","base":0}`;
 const formItemLayout = {
   labelCol: { span: 6 },
@@ -298,7 +298,7 @@ class CaseModal extends React.Component {
           {getFieldDecorator('case', {
             rules: [{ required: true, message: '请填写用例名称' }],
             initialValue: data
-              ? (operate == 'copy' && `copy of ${data.title}`) || data.title
+              ? (operate == 'copy' && copyCaseTitle(data.title)) || data.title
               : '',
           })(<Input placeholder="请填写用例名称" />)}
         </Form.Item>
