@@ -13,7 +13,6 @@ import {
   Button,
   Icon,
   message,
-  notification,
   Modal,
   Spin,
   Switch,
@@ -171,7 +170,7 @@ class KityminderEditor extends Component {
     });
     minder.on('progressiveimportdone', this.centerImportedMap);
     minder.on('progressiveimporterror', () => this.setState({ loading: false }));
-    minder.on('layouterror', () => notification.error({ message: '脑图布局更新失败，请重新进入当前页面' }));
+    minder.on('layouterror', () => message.error('脑图布局更新失败，请重新进入当前页面'));
     // 视图选中节点变更事件
     minder.on('selectionchange', () => {
       const node = minder.getSelectedNode();
@@ -897,7 +896,7 @@ class KityminderEditor extends Component {
           this.setState({ isLock: true }, () => {
               document.removeEventListener('keydown', this.handleKeyDown);
           });
-          notification.warning({ message: '用例被锁住，当前只读' });
+          message.warning(this.props.progressShow ? '当前任务已锁定，不可执行' : '当前用例已锁定，不可编辑');
           break;
 
       case '1':
@@ -906,21 +905,21 @@ class KityminderEditor extends Component {
               this.initOnEvent(this.minder);
               document.addEventListener('keydown', this.handleKeyDown);
           });
-          notification.warning({ message: '用例被解锁，请刷新重试' });
+          message.warning('用例被解锁，请刷新重试');
         break;
 
       case '2':
-          notification.success({ message: this.pendingLockState ? '锁定成功' : '解锁成功' });
+          message.success(this.pendingLockState ? '锁定成功' : '解锁成功');
           this.setState({ locked: Boolean(this.pendingLockState) });
           this.pendingLockState = undefined;
         break;
 
       case '4':
-          this.setState({ locked: true });
+          this.setState({ locked: true, isLock: false });
         break;
 
       case '3':
-          notification.error({ message: '加/解锁失败' });
+          message.error('加/解锁失败');
           this.pendingLockState = undefined;
           break;
     }
@@ -938,7 +937,7 @@ class KityminderEditor extends Component {
   handleLockToggle = checked => {
     if (this.pageBlocked) return;
     if (!this.ws || typeof this.ws.sendMessage !== 'function') {
-      notification.error({ message: '锁定服务未连接，请稍后重试' });
+      message.error('锁定服务未连接，请稍后重试');
       return;
     }
     this.pendingLockState = checked;
@@ -1012,7 +1011,7 @@ class KityminderEditor extends Component {
     //   return;
     // }
     if (data === 'HTTP_ACCESS_ERROR') {
-      notification.warning({ message: '服务端实例退出，请刷新页面。' });
+      message.warning('服务端实例退出，请刷新页面。');
       return;
     }
     if (data === 'websocket on error') {
@@ -1322,20 +1321,22 @@ class KityminderEditor extends Component {
                 </Popover>,
                 <Tooltip
                   key="lock"
-                  title={isLock ? '其他页面已锁定' : (locked ? '点击解锁' : '点击锁定')}
+                  title={isLock ? '已锁定' : (locked ? '可编辑，点击解锁' : '点击锁定')}
                   getPopupContainer={triggerNode => triggerNode.parentNode}
                 >
                   {type !== 'compare' && (
-                    <Switch
-                      size="small"
-                      aria-label={isLock ? '其他页面已锁定' : (locked ? '解锁' : '锁定')}
-                      checkedChildren={<Icon type="lock" />}
-                      unCheckedChildren={<Icon type="unlock" />}
-                      checked={isLock || locked}
-                      disabled={isLock}
-                      onChange={this.handleLockToggle}
-                      className="yuntu-lock"
-                    />
+                    <span className="yuntu-lock-wrap">
+                      <Switch
+                        size="small"
+                        aria-label={isLock ? '已锁定' : (locked ? '解锁' : '锁定')}
+                        checkedChildren={<Icon type="lock" />}
+                        unCheckedChildren={<Icon type="unlock" />}
+                        checked={isLock || locked}
+                        disabled={isLock}
+                        onChange={this.handleLockToggle}
+                        className="yuntu-lock"
+                      />
+                    </span>
                   )}
                 </Tooltip>,
                 <Button

@@ -1,7 +1,7 @@
 import React from 'react';
 import PropTypes from 'prop-types';
 import io from './assets/socketio/socket.io.js';
-import { notification } from 'antd';
+import { message } from 'antd';
 import {
     importMindMapProgressively,
     cancelMindMapImport,
@@ -80,7 +80,7 @@ class Socket extends React.Component {
                 this.expectedBase = this.props.wsMinder.getBase();
                 localStorage.removeItem(cacheKey);
             } catch (error) {
-                if (!this.unmounted) notification.error({ message: '用例加载失败，请重新进入当前页面' });
+                if (!this.unmounted) message.error('用例加载失败，请重新进入当前页面');
             }
         });
 
@@ -174,7 +174,7 @@ class Socket extends React.Component {
         });
 
         websocket.on('warning', e => {
-            notification.error({ message: 'server process patch failed, please refresh'});
+            message.error('服务端处理变更失败，请刷新页面');
         });
     }
 

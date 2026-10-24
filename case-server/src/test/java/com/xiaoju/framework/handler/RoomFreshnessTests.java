@@ -10,6 +10,10 @@ import com.corundumstudio.socketio.SocketIOServer;
 import org.junit.Test;
 
 import java.util.UUID;
+import java.util.Set;
+import java.util.HashSet;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Future;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +28,33 @@ import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.eq;
 
 public class RoomFreshnessTests {
+    @Test
+    public void concurrentFirstConnectionsShareOneRoom() throws Exception {
+        TestCaseMapper mapper = mock(TestCaseMapper.class);
+        TestCase content = new TestCase();
+        content.setCaseContent("{\"base\":1,\"root\":{\"data\":{\"id\":\"root\"},\"children\":[]}}");
+        CountDownLatch twoConstructors = new CountDownLatch(2);
+        when(mapper.selectOne(887766L)).thenAnswer(call -> {
+            twoConstructors.countDown();
+            twoConstructors.await(2, TimeUnit.SECONDS);
+            return content;
+        });
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            Future<RoomEntity> first = workers.submit(() -> { start.await(); return RoomFactory.getRoom("concurrent-887766", 887766L, mapper); });
+            Future<RoomEntity> second = workers.submit(() -> { start.await(); return RoomFactory.getRoom("concurrent-887766", 887766L, mapper); });
+            start.countDown();
+            Set<RoomEntity> rooms = new HashSet<>();
+            rooms.add(first.get(5, TimeUnit.SECONDS));
+            rooms.add(second.get(5, TimeUnit.SECONDS));
+            assertEquals(1, rooms.size());
+        } finally {
+            workers.shutdownNow();
+            RoomFactory.clearRoom("concurrent-887766");
+        }
+    }
+
     @Test
     public void ownQueuedChangesDoNotLookLikeAnotherTabsChanges() {
         TestCaseMapper mapper = mock(TestCaseMapper.class);

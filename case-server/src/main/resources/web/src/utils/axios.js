@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { notification } from 'antd'
+import { message } from 'antd'
 
 /**
  * 一、功能：
@@ -11,7 +11,7 @@ import { notification } from 'antd'
  * 
  * 二、引包：
  * |-- axios：http 请求工具库
- * |-- notification：Antd组件 > 处理错误响应码提示信息
+ * |-- message：Antd组件 > 处理错误响应码提示信息
  * |-- routerRedux：dva/router对象，用于路由跳转，错误响应码跳转相应页面
  * |-- store：dva中对象，使用里面的 dispatch 对象，用于触发路由跳转
  */
@@ -122,10 +122,7 @@ export default function request(url, opt) {
       const status = error.response.status
       const errortext = codeMessage[status] || error.response.statusText
 
-      notification.error({
-        message: `请求错误 ${status}`,
-        description: errortext,
-      })
+      message.error(`请求错误 ${status}：${errortext}`)
 
       return { code: status, message: errortext }
     })
