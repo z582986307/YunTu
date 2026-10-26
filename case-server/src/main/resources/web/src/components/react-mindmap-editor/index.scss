@@ -347,6 +347,20 @@
     box-shadow: 0 0 0 3px rgba(51, 112, 255, .12);
   }
 
+  &:not(.ant-switch-checked):not(.ant-switch-disabled) {
+    border-color: #22c55e;
+    background-color: #22c55e;
+
+    &:hover, &:focus {
+      border-color: #16a34a;
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, .16);
+    }
+
+    .ant-switch-inner .anticon {
+      color: #fff;
+    }
+  }
+
   &::after {
     top: 3px;
     left: 3px;

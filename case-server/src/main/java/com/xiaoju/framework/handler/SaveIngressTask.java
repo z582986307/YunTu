@@ -59,9 +59,21 @@ public class SaveIngressTask extends IngressTask {
             return;
         }
         // 1.更新内存中的用例
+        String previousContent = room.getCaseContent();
         try {
+            if (!backup && !(room instanceof RecordEntity)) {
+                int clientVersion = jsonMapper.readTree(data.getCaseContent()).path("base").asInt();
+                int roomVersion = jsonMapper.readTree(room.getCaseContent()).path("base").asInt();
+                if (clientVersion != roomVersion) {
+                    executorEgressService.submit(new AckEgressTask("stale_data_event",
+                            PushMessage.builder().message("stale").build(), client));
+                    return;
+                }
+                room.persistCaseContent(client.getHandshakeData().getSingleUrlParam("user"));
+                return;
+            }
             if (room instanceof RecordEntity) room.setCaseContent(data.getCaseContent());
-            else room.acceptSaveContent(data.getCaseContent());
+            else room.acceptSaveContent(data.getCaseContent(), client.getSessionId());
         } catch (Exception error) {
             LOGGER.error("保存内容格式错误", error);
             acknowledgeSave(error instanceof IllegalStateException && error.getMessage() != null &&
@@ -70,8 +82,9 @@ public class SaveIngressTask extends IngressTask {
         }
         if (!(room instanceof RecordEntity)) {
             try {
-                room.persistCaseContent(client.getHandshakeData().getSingleUrlParam("user"));
+                room.persistCaseContent(client.getHandshakeData().getSingleUrlParam("user"), previousContent);
             } catch (Exception error) {
+                room.setCaseContent(previousContent);
                 LOGGER.error("保存用例主数据失败", error);
                 acknowledgeSave(error instanceof IllegalStateException && error.getMessage() != null &&
                         error.getMessage().contains("版本冲突") ? "conflict" : "error");

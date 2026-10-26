@@ -15,6 +15,19 @@ test('被锁定页面按用例和任务分别给出明确提示', () => {
   expect(editor).toContain('<span className="yuntu-lock-wrap">')
 })
 
+test('首个进入者拥有编辑权时不显示主动锁定状态', () => {
+  const handlerBody = editor.match(/handleLock = \(data\) => \{([\s\S]*?)\n  \}/)[1]
+  const handleLock = new Function('data', 'message', handlerBody)
+  const page = {
+    state: { locked: false, isLock: false },
+    setState(update) { Object.assign(this.state, update) },
+  }
+
+  handleLock.call(page, '4', {})
+
+  expect(page.state).toEqual({ locked: false, isLock: false })
+})
+
 test('轻提示统一采用保存成功同款 message 样式', () => {
   expect(editor).toContain("message.warning(this.props.progressShow ? '当前任务已锁定，不可执行' : '当前用例已锁定，不可编辑')")
   expect(editor).not.toMatch(/^(?!\s*\/\/)[^\n]*notification\.(success|warning|error|info)/m)

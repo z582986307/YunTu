@@ -915,7 +915,7 @@ class KityminderEditor extends Component {
         break;
 
       case '4':
-          this.setState({ locked: true, isLock: false });
+          this.setState({ locked: false, isLock: false });
         break;
 
       case '3':

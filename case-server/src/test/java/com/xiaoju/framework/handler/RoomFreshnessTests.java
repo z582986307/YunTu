@@ -180,7 +180,7 @@ public class RoomFreshnessTests {
             outgoing.shutdown();
             outgoing.awaitTermination(5, TimeUnit.SECONDS);
         }
-        verify(client).sendEvent(eq("save_ack_event"), any(PushMessage.class));
+        verify(client).sendEvent(eq("stale_data_event"), any(PushMessage.class));
         assertEquals(2, new com.fasterxml.jackson.databind.ObjectMapper().readTree(room.getCaseContent()).path("base").asInt());
     }
 

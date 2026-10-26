@@ -2,6 +2,9 @@ package com.xiaoju.framework.handler;
 
 import com.xiaoju.framework.entity.persistent.TestCase;
 import com.xiaoju.framework.mapper.TestCaseMapper;
+import com.xiaoju.framework.mapper.CaseBackupMapper;
+import com.corundumstudio.socketio.HandshakeData;
+import com.corundumstudio.socketio.SocketIOClient;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -9,8 +12,70 @@ import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
 
 public class RoomEntityPersistenceTests {
+    @Test
+    public void currentEditorCanManuallySaveAppearanceAtAcceptedEditVersion() throws Exception {
+        TestCaseMapper mapper = mock(TestCaseMapper.class);
+        TestCase roomCopy = new TestCase();
+        roomCopy.setCaseContent("{\"base\":2,\"root\":{\"data\":{\"text\":\"old\"},\"children\":[]}}");
+        TestCase stored = new TestCase();
+        stored.setCaseContent(roomCopy.getCaseContent());
+        when(mapper.selectOne(2212L)).thenReturn(roomCopy, stored);
+        when(mapper.update(stored)).thenReturn(1);
+        RoomEntity room = new RoomEntity("2212", 2212L, mapper);
+        room.setCaseContent("{\"base\":3,\"root\":{\"data\":{\"text\":\"new\"},\"children\":[]}}");
+        stored.setCaseContent(room.getCaseContent());
+        SocketIOClient client = mock(SocketIOClient.class);
+        HandshakeData handshake = mock(HandshakeData.class);
+        when(client.getSessionId()).thenReturn(java.util.UUID.randomUUID());
+        when(client.getHandshakeData()).thenReturn(handshake);
+        room.addClient(client);
+        CaseBackupMapper backups = mock(CaseBackupMapper.class);
+        when(backups.selectByCaseId(2212L, null, null)).thenReturn(java.util.Collections.emptyList());
+        when(backups.insert(any())).thenReturn(1);
+        EditMessage appearance = EditMessage.builder()
+                .caseContent("{\"base\":3,\"theme\":\"ink-black\",\"root\":{\"data\":{\"text\":\"new\"},\"children\":[]}}")
+                .build();
+
+        new SaveIngressTask(client, null, room, mock(java.util.concurrent.ExecutorService.class),
+                appearance, backups).run();
+
+        verify(mapper).update(stored);
+        assertEquals("ink-black", com.alibaba.fastjson.JSON.parseObject(stored.getCaseContent()).getString("theme"));
+    }
+
+    @Test
+    public void autosavePersistsAcceptedEditWithoutReplacingItWithExportedSnapshot() throws Exception {
+        TestCaseMapper mapper = mock(TestCaseMapper.class);
+        TestCase roomCopy = new TestCase();
+        roomCopy.setCaseContent("{\"base\":2,\"root\":{\"data\":{\"text\":\"old\"},\"children\":[]}}");
+        TestCase stored = new TestCase();
+        stored.setCaseContent(roomCopy.getCaseContent());
+        when(mapper.selectOne(2211L)).thenReturn(roomCopy, stored);
+        when(mapper.update(stored)).thenReturn(1);
+        RoomEntity room = new RoomEntity("2211", 2211L, mapper);
+        room.setCaseContent("{\"base\":3,\"root\":{\"data\":{\"text\":\"new\"},\"children\":[]}}");
+        SocketIOClient client = mock(SocketIOClient.class);
+        HandshakeData handshake = mock(HandshakeData.class);
+        when(client.getSessionId()).thenReturn(java.util.UUID.randomUUID());
+        when(client.getHandshakeData()).thenReturn(handshake);
+        room.addClient(client);
+        room.clientUnlock();
+        room.noteAcceptedEdit(java.util.UUID.randomUUID(), 3);
+        EditMessage export = EditMessage.builder()
+                .caseContent("{\"base\":3,\"root\":{\"data\":{\"text\":\"new\",\"expandState\":\"expand\"},\"children\":[]}}")
+                .build();
+
+        new SaveIngressTask(client, null, room, mock(java.util.concurrent.ExecutorService.class),
+                export, null, false).run();
+
+        verify(mapper).update(stored);
+        assertEquals("new", com.alibaba.fastjson.JSON.parseObject(stored.getCaseContent())
+                .getJSONObject("root").getJSONObject("data").getString("text"));
+    }
+
     @Test
     public void manualSavePersistsCurrentCaseForNewTaskLoads() throws Exception {
         TestCaseMapper mapper = mock(TestCaseMapper.class);

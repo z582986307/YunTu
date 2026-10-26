@@ -69,14 +69,21 @@ public class RoomEntity {
     }
 
     public synchronized boolean persistCaseContent(String modifier) throws Exception {
+        return persistCaseContent(modifier, null);
+    }
+
+    public synchronized boolean persistCaseContent(String modifier, String previousContent) throws Exception {
         JsonNode saveContent = jsonMapper.readTree(testCase.getCaseContent());
         TestCase stored = caseMapper.selectOne(caseId);
         if (stored == null) throw new IllegalStateException("用例不存在");
         JsonNode storedContent = jsonMapper.readTree(stored.getCaseContent());
         int saveVersion = saveContent.path("base").asInt();
         int storedVersion = storedContent.path("base").asInt();
+        boolean unchangedSinceEditorRead = previousContent != null &&
+                storedContent.equals(jsonMapper.readTree(previousContent));
         if (saveVersion < storedVersion ||
-                (saveVersion == storedVersion && !saveContent.equals(storedContent))) {
+                (saveVersion == storedVersion && !saveContent.equals(storedContent) &&
+                        !unchangedSinceEditorRead)) {
             throw new IllegalStateException("用例版本冲突，不能覆盖数据库");
         }
         if (saveContent.equals(storedContent)) return true;
@@ -148,12 +155,19 @@ public class RoomEntity {
     }
 
     public synchronized void acceptSaveContent(String caseContent) throws Exception {
+        acceptSaveContent(caseContent, null);
+    }
+
+    public synchronized void acceptSaveContent(String caseContent, UUID editor) throws Exception {
         JsonNode incoming = jsonMapper.readTree(caseContent);
         JsonNode current = jsonMapper.readTree(testCase.getCaseContent());
         int incomingVersion = incoming.path("base").asInt();
         int currentVersion = current.path("base").asInt();
+        boolean currentEditor = editor != null && lockClient != null &&
+                editor.equals(lockClient.getSessionId()) &&
+                !hasForeignEditSince(editor, incomingVersion - 1);
         if (incomingVersion < currentVersion ||
-                (incomingVersion == currentVersion && !incoming.equals(current))) {
+                (incomingVersion == currentVersion && !incoming.equals(current) && !currentEditor)) {
             throw new IllegalStateException("用例版本冲突，请刷新后重试");
         }
         this.testCase.setCaseContent(caseContent);
