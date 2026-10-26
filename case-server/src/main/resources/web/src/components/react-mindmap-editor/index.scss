@@ -386,8 +386,8 @@
   }
 
   &.ant-switch-checked {
-    border-color: #2b87e6;
-    background-color: #2b87e6;
+    border-color: #faad14;
+    background-color: #faad14;
 
     &::after {
       left: 100%;
@@ -414,6 +414,21 @@
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
+  gap: 6px;
+}
+.yuntu-lock-readonly {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid #faad14;
+  border-radius: 12px;
+  background: #faad14;
+  color: #422006;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: not-allowed;
 }
 .mindmap-online-button.ant-btn-primary {
   border-radius: 8px;

@@ -9,13 +9,11 @@ const axios = fs.readFileSync(path.resolve(__dirname, '../src/utils/axios.js'), 
 
 test('被锁定页面按用例和任务分别给出明确提示', () => {
   expect(editor).toContain("this.props.progressShow ? '当前任务已锁定，不可执行' : '当前用例已锁定，不可编辑'")
-  expect(editor).toContain("title={isLock ? '已锁定'")
-  expect(editor).toContain("aria-label={isLock ? '已锁定'")
-  expect(editor).toContain("locked ? '可编辑，点击解锁' : '点击锁定'")
+  expect(editor).toContain("locked ? '已锁定，仅当前用户可操作' : '已解锁，可锁定'")
   expect(editor).toContain('<span className="yuntu-lock-wrap">')
 })
 
-test('首个进入者拥有编辑权时不显示主动锁定状态', () => {
+test('首个进入者显示持有锁且可编辑，点击后发送解锁请求', () => {
   const handlerBody = editor.match(/handleLock = \(data\) => \{([\s\S]*?)\n  \}/)[1]
   const handleLock = new Function('data', 'message', handlerBody)
   const page = {
@@ -25,6 +23,13 @@ test('首个进入者拥有编辑权时不显示主动锁定状态', () => {
 
   handleLock.call(page, '4', {})
 
+  expect(page.state).toEqual({ locked: true, isLock: false })
+  const toggleBody = editor.match(/handleLockToggle = checked => \{([\s\S]*?)\n  \};/)[1]
+  const toggle = new Function('checked', 'message', toggleBody)
+  page.ws = { sendMessage: jest.fn() }
+  toggle.call(page, false, {})
+  expect(page.ws.sendMessage).toHaveBeenCalledWith('lock', { message: 'unlock' })
+  handleLock.call(page, '2', { success: () => {} })
   expect(page.state).toEqual({ locked: false, isLock: false })
 })
 

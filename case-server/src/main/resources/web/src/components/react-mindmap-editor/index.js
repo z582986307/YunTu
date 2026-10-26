@@ -901,11 +901,11 @@ class KityminderEditor extends Component {
 
       case '1':
           this.minder.setStatus('normal', true);
-          this.setState({ isLock: false }, () => {
+          this.setState({ isLock: false, locked: false }, () => {
               this.initOnEvent(this.minder);
               document.addEventListener('keydown', this.handleKeyDown);
           });
-          message.warning('用例被解锁，请刷新重试');
+          message.success(this.props.progressShow ? '已解锁，可执行' : '已解锁，可编辑');
         break;
 
       case '2':
@@ -915,7 +915,7 @@ class KityminderEditor extends Component {
         break;
 
       case '4':
-          this.setState({ locked: false, isLock: false });
+          this.setState({ locked: true, isLock: false });
         break;
 
       case '3':
@@ -1320,21 +1320,24 @@ class KityminderEditor extends Component {
                 </Popover>,
                 <Tooltip
                   key="lock"
-                  title={isLock ? '已锁定' : (locked ? '可编辑，点击解锁' : '点击锁定')}
+                  title={isLock ? '已锁定，不可操作' : (locked ? '已锁定，仅当前用户可操作' : '已解锁，可锁定')}
                   getPopupContainer={triggerNode => triggerNode.parentNode}
                 >
                   {type !== 'compare' && (
                     <span className="yuntu-lock-wrap">
-                      <Switch
-                        size="small"
-                        aria-label={isLock ? '已锁定' : (locked ? '解锁' : '锁定')}
-                        checkedChildren={<Icon type="lock" />}
-                        unCheckedChildren={<Icon type="unlock" />}
-                        checked={isLock || locked}
-                        disabled={isLock}
-                        onChange={this.handleLockToggle}
-                        className="yuntu-lock"
-                      />
+                      {isLock ? (
+                        <span className="yuntu-lock-readonly" role="status" aria-label="已锁定，不可操作">
+                          已锁定
+                        </span>
+                      ) : (
+                        <Switch
+                          size="small"
+                          aria-label={locked ? '已锁定，仅当前用户可操作' : '已解锁'}
+                          checked={locked}
+                          onChange={this.handleLockToggle}
+                          className="yuntu-lock"
+                        />
+                      )}
                     </span>
                   )}
                 </Tooltip>,
