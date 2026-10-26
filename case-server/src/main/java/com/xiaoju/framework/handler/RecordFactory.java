@@ -4,6 +4,8 @@ import com.xiaoju.framework.mapper.ExecRecordMapper;
 import com.xiaoju.framework.mapper.TestCaseMapper;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collection;
+import java.util.stream.Collectors;
 
 public class RecordFactory {
     static ConcurrentHashMap<String, RecordEntity> recordEntityMap = new ConcurrentHashMap<>();
@@ -14,5 +16,10 @@ public class RecordFactory {
 
     public static void clearRoom(String roomId) {
         recordEntityMap.remove(roomId);
+    }
+
+    public static Collection<RecordEntity> roomsForCase(Long caseId) {
+        return recordEntityMap.values().stream()
+                .filter(room -> caseId.equals(room.getCaseId())).collect(Collectors.toList());
     }
 }

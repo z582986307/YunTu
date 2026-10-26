@@ -38,7 +38,12 @@ public class EditIngressTask extends IngressTask {
         BroadcastOperations broadcastOperations = socketIOServer.getRoomOperations(roomId);
 
         try {
-            if (room.isLockedByClient() && !room.lockByClient(client)) {
+            if (room.isStaleClient(client.getSessionId())) {
+                executorEgressService.submit(new AckEgressTask("stale_data_event",
+                        PushMessage.builder().message("stale").build(), client));
+                return;
+            }
+            if ((room.isLockedByClient() || RoomEntity.isSourceTaskClient(client)) && !room.lockByClient(client)) {
                 executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
                 return;
             }
@@ -84,15 +89,7 @@ public class EditIngressTask extends IngressTask {
             }
 
             room.setCaseContent(roomContentNew.toString());
-            try {
-                if (room instanceof RecordEntity) {
-                    String user = client.getHandshakeData().getSingleUrlParam("user");
-                    ((RecordEntity) room).persistExecutionRecord(user);
-                }
-            } catch (Exception error) {
-                room.setCaseContent(roomContent.toString());
-                throw error;
-            }
+            room.persistAcceptedEdit(client, roomContent.toString());
             room.noteAcceptedEdit(client.getSessionId(), serverCaseExpectVersion);
             executorEgressService.submit(new AckEgressTask("edit_ack_event", PushMessage.builder().message(patchAck.toString()).build(), client));
             executorEgressService.submit(new NotifyExcludeEgressTask("edit_notify_event", PushMessage.builder().message(patchNew.toString()).build(), client, broadcastOperations));

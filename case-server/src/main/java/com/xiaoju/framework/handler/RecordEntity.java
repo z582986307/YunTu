@@ -18,6 +18,9 @@ import org.springframework.util.StringUtils;
 
 import java.util.*;
 import java.util.stream.Collectors;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 import static com.xiaoju.framework.constants.SystemConstant.COMMA;
 
@@ -26,6 +29,8 @@ public class RecordEntity extends RoomEntity {
 //    ExecRecord execRecord;
     ExecRecordMapper recordMapper;
     private JSONObject appearance;
+    private int sourceVersion;
+    private byte[] sourceFingerprint;
     private static final Set<String> APPEARANCE_FIELDS = new HashSet<>(Arrays.asList(
             "font-size", "font-family", "font-weight", "font-style", "text-decoration",
             "background", "color", "layout", "shape"));
@@ -33,11 +38,43 @@ public class RecordEntity extends RoomEntity {
     public RecordEntity(String roomId, Long caseId, TestCaseMapper caseMapper, Long recordId, ExecRecordMapper execRecordMapper) {
         super(roomId, caseId, caseMapper);
         this.recordId = recordId;
+        this.sourceVersion = JSON.parseObject(testCase.getCaseContent()).getIntValue("base");
+        this.sourceFingerprint = fingerprint(testCase.getCaseContent());
         String recordContent = mergeRecord(recordId, testCase.getCaseContent(), execRecordMapper);
         testCase.setCaseContent(recordContent);
         testCase.setGroupId(recordId);
         this.recordMapper = execRecordMapper;
 
+    }
+
+    public synchronized int getSourceVersion() {
+        return sourceVersion;
+    }
+
+    public synchronized boolean refreshFromSourceIfChanged() {
+        TestCase latest = caseMapper.selectOne(caseId);
+        if (latest == null) throw new IllegalStateException("源用例不存在");
+        int latestVersion = JSON.parseObject(latest.getCaseContent()).getIntValue("base");
+        byte[] latestFingerprint = fingerprint(latest.getCaseContent());
+        if (Arrays.equals(latestFingerprint, sourceFingerprint)) return false;
+        int currentBase = JSON.parseObject(getCaseContent()).getIntValue("base");
+        JSONObject merged = JSON.parseObject(mergeRecord(recordId, latest.getCaseContent(), recordMapper));
+        int nextBase = currentBase + 1;
+        merged.put("base", nextBase);
+        setCaseContent(merged.toJSONString());
+        sourceVersion = latestVersion;
+        sourceFingerprint = latestFingerprint;
+        invalidateExistingClients(nextBase);
+        return true;
+    }
+
+    private static byte[] fingerprint(String sourceContent) {
+        try {
+            // 数据库无变化保存不改写 JSON 字节；固定 32 字节摘要避免常驻第二份大型脑图。
+            return MessageDigest.getInstance("SHA-256").digest(sourceContent.getBytes(StandardCharsets.UTF_8));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("源用例版本检查不可用", error);
+        }
     }
 
     @Override

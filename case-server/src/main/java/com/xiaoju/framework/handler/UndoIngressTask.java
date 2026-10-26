@@ -7,15 +7,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.flipkart.zjsonpatch.CompatibilityFlags;
-import com.flipkart.zjsonpatch.JsonDiff;
 import com.flipkart.zjsonpatch.JsonPatch;
 
 import java.util.EnumSet;
 import java.util.concurrent.ExecutorService;
 
 import static com.flipkart.zjsonpatch.CompatibilityFlags.*;
-import static com.flipkart.zjsonpatch.DiffFlags.ADD_ORIGINAL_VALUE_ON_REPLACE;
-import static com.flipkart.zjsonpatch.DiffFlags.OMIT_MOVE_OPERATION;
 
 public class UndoIngressTask extends IngressTask {
     PushMessage data;
@@ -26,29 +23,62 @@ public class UndoIngressTask extends IngressTask {
     }
     @Override
     public void run() {
-        room.lock();
-        LOGGER.info(data.getMessage());
+        applyHistory("undo");
+    }
+
+    protected void applyHistory(String event) {
+        synchronized (room) {
+            applyHistoryLocked(event);
+        }
+    }
+
+    private void applyHistoryLocked(String event) {
+        if (room.isStaleClient(client.getSessionId())) {
+            executorEgressService.submit(new AckEgressTask("stale_data_event", PushMessage.builder().message("stale").build(), client));
+            return;
+        }
+        if ((room.isLockedByClient() || RoomEntity.isSourceTaskClient(client)) && !room.lockByClient(client)) {
+            executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+            return;
+        }
+        String previousContent = room.getCaseContent();
         try {
             ArrayNode patch = (ArrayNode) jsonMapper.readTree(data.getMessage());
-            JsonNode roomContent = jsonMapper.readTree(room.getCaseContent());
+            JsonNode roomContent = jsonMapper.readTree(previousContent);
+            int nextVersion = roomContent.path("base").asInt() + 1;
+            boolean sourceEditing = RoomEntity.isSourceTaskClient(client);
+            ArrayNode normalized = patch;
+            if (sourceEditing) {
+                normalized = FACTORY.arrayNode();
+                for (JsonNode operation : patch) {
+                    if (!"/base".equals(operation.path("path").asText())) normalized.add(operation);
+                }
+                normalized.add(FACTORY.objectNode().put("op", "replace").put("path", "/base").put("value", nextVersion));
+            }
             EnumSet<CompatibilityFlags> flags = CompatibilityFlags.defaults();
             flags.add(MISSING_VALUES_AS_NULLS);
             flags.add(ALLOW_MISSING_TARGET_OBJECT_ON_REPLACE);
             flags.add(REMOVE_NONE_EXISTING_ARRAY_ELEMENT);
-            JsonNode roomContentNew = JsonPatch.apply(patch, roomContent, flags);
+            JsonNode roomContentNew = JsonPatch.apply(normalized, roomContent, flags);
             room.setCaseContent(roomContentNew.toString());
+            room.persistAcceptedEdit(client, previousContent);
+            room.noteAcceptedEdit(client.getSessionId(), roomContentNew.path("base").asInt());
 
             ClientEntity clientEntity = getRoomFromClient(client);
             String roomId = clientEntity.getRoomId();
             BroadcastOperations broadcastOperations = socketIOServer.getRoomOperations(roomId);
-            LOGGER.info("get undo info");
-            broadcastOperations.sendEvent("undo", client, PushMessage.builder().message(data.getMessage()).build());
+            if (sourceEditing) {
+                ArrayNode acknowledgement = FACTORY.arrayNode();
+                acknowledgement.add(normalized.get(normalized.size() - 1));
+                executorEgressService.submit(new AckEgressTask("source_revision_event", PushMessage.builder().message(acknowledgement.toString()).build(), client));
+            }
+            executorEgressService.submit(new NotifyExcludeEgressTask(event,
+                    PushMessage.builder().message(normalized.toString()).build(), client, broadcastOperations));
 
         } catch (Exception e) {
-            LOGGER.error("undo error");
-
-        } finally {
-            room.unlock();
+            room.setCaseContent(previousContent);
+            LOGGER.warn("撤销或重做提交失败");
+            executorEgressService.submit(new AckEgressTask("warning", PushMessage.builder().message("撤销或重做保存失败，请刷新后重试").build(), client));
         }
     }
 

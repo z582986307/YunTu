@@ -21,8 +21,21 @@ public class CaseDesignIngressTask extends IngressTask{
 
     @Override
     public void run() {
+        synchronized (room) {
+            applyDesign();
+        }
+    }
+
+    private void applyDesign() {
+        if (room.isStaleClient(client.getSessionId())) {
+            executorEgressService.submit(new AckEgressTask("stale_data_event", PushMessage.builder().message("stale").build(), client));
+            return;
+        }
+        if ((room.isLockedByClient() || RoomEntity.isSourceTaskClient(client)) && !room.lockByClient(client)) {
+            executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+            return;
+        }
         room.lock();
-        LOGGER.info("接收到来自客户端用例设计信息:" + data.toString());
         String msgCode = data.getMethod();
         String nodeId = data.getNodeId();
         String content = data.getMessage();
@@ -34,16 +47,11 @@ public class CaseDesignIngressTask extends IngressTask{
         switch (msgCode) {
 
             case "pariwise" :
-                LOGGER.info("用户输入：" + content);
                 List<String> pairWiseCases = PairWise.solution(content);
                 if (pairWiseCases.size() == 0) {
                     LOGGER.error("未生成用例。");
                     break;
                 }
-
-                LOGGER.info("生成case：" + pairWiseCases);
-                LOGGER.info("nodeid：" + nodeId);
-
                 patch = JsonNodeOp.generatePatch(caseContent, nodeId, pairWiseCases);
 
                 break;
@@ -55,15 +63,18 @@ public class CaseDesignIngressTask extends IngressTask{
             if (patch.size() == 0) {
                 return;
             }
-            LOGGER.info("发送的patch：" + patch.toString());
             JsonNode target = JsonPatch.apply(patch, jsonMapper.readTree(caseContent));
             room.setCaseContent(target.toString());
+            room.persistAcceptedEdit(client, caseContent);
+            room.noteAcceptedEdit(client.getSessionId(), target.path("base").asInt());
 //            BroadcastOperations broadcastOperations = socketIOServer.getRoomOperations(roomId);
             executorEgressService.submit(new NotifyEgressTask("edit_notify_event",
                     PushMessage.builder().message(patch.toString()).build(), socketIOServer.getRoomOperations(roomId)));
 
         } catch (Exception e) {
-            LOGGER.error("服务端合并patch异常：", e);
+            room.setCaseContent(caseContent);
+            LOGGER.warn("用例设计提交失败");
+            executorEgressService.submit(new AckEgressTask("warning", PushMessage.builder().message("用例设计保存失败，请刷新后重试").build(), client));
             room.unlock();
         }
 

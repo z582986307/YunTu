@@ -100,47 +100,66 @@ public class SocketIOServiceImpl implements SocketIOService {
                 client.disconnect();
                 return;
             }
+            if (!validateSourceTask(client)) return;
             ClientEntity clientEntity = getRoomFromClient(client);
             String roomId = clientEntity.getRoomId();
             if (null == clientEntity.getRecordId()) {
                 RoomEntity roomEntity = RoomFactory.getRoom(roomId, clientEntity.getCaseId(), caseMapper);
-                if (!roomEntity.addClient(client)) return;
-                clientRoomMap.put(client, roomEntity);
-                client.joinRoom(roomId);
-                LOGGER.info("add case client room map size: " + clientRoomMap.keySet().size());
-                executorEgressService.submit(new AckEgressTask("open_event",
-                        PushMessage.builder().message(roomEntity.getCaseContent()).build(), client));
-                if (roomEntity.lockByClient(client)) {
-                    executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("4").build(), client));
-                } else if (roomEntity.isLockedByClient()) {
-                    LOGGER.info("add client, case is locked by others");
-                    executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+                synchronized (roomEntity) {
+                    roomEntity.setSourceCaseUpdateNotifier(new SourceCaseUpdateNotifier(socketIOServer));
+                    if (!roomEntity.addClient(client)) return;
+                    clientRoomMap.put(client, roomEntity);
+                    client.joinRoom(roomId);
+                    LOGGER.info("add case client room map size: " + clientRoomMap.keySet().size());
+                    executorEgressService.submit(new AckEgressTask("open_event",
+                            PushMessage.builder().message(roomEntity.getCaseContent()).build(), client));
+                    if (roomEntity.lockByClient(client)) {
+                        executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("4").build(), client));
+                        if (RoomEntity.isSourceTaskClient(client)) {
+                            executorEgressService.submit(new NotifyExcludeEgressTask("lock",
+                                    PushMessage.builder().message("0").build(), client, socketIOServer.getRoomOperations(roomId)));
+                        }
+                    } else if (roomEntity.isLockedByClient()) {
+                        LOGGER.info("add client, case is locked by others");
+                        executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+                    }
+
+                    executorEgressService.submit(new NotifyEgressTask("connect_notify_event",
+                            PushMessage.builder().message(roomEntity.getClientName()).build(), socketIOServer.getRoomOperations(roomId)));
+
+                    LOGGER.info("connected caseId: " + clientEntity.getCaseIdStr() + ", roomId: " + roomId);
                 }
-
-                executorEgressService.submit(new NotifyEgressTask("connect_notify_event",
-                        PushMessage.builder().message(roomEntity.getClientName()).build(), socketIOServer.getRoomOperations(roomId)));
-
-                LOGGER.info("connected caseId: " + clientEntity.getCaseIdStr() + ", roomId: " + roomId);
 
             } else {
                 RecordEntity recordEntity = RecordFactory.getRoom(roomId, clientEntity.getCaseId(), caseMapper, clientEntity.getRecordId(), recordMapper);
-                if (!recordEntity.addClient(client)) return;
-                clientRoomMap.put(client, recordEntity);
-                client.joinRoom(roomId);
-                LOGGER.info("add record client room map size: " + clientRoomMap.keySet().size());
-                executorEgressService.submit(new AckEgressTask("open_event",
-                        PushMessage.builder().message(recordEntity.getCaseContent()).build(), client));
+                synchronized (recordEntity) {
+                    if (recordEntity.refreshFromSourceIfChanged() && recordEntity.getClientNum() > 0) {
+                        // 固定本次刷新前的收件人；异步房间广播会把随后加入的新页面误判为过期。
+                        for (Map.Entry<SocketIOClient, RoomEntity> participant : clientRoomMap.entrySet()) {
+                            if (participant.getValue() == recordEntity) {
+                                executorEgressService.submit(new AckEgressTask("stale_data_event",
+                                        PushMessage.builder().message("stale").build(), participant.getKey()));
+                            }
+                        }
+                    }
+                    if (!recordEntity.addClient(client)) return;
+                    clientRoomMap.put(client, recordEntity);
+                    client.joinRoom(roomId);
+                    LOGGER.info("add record client room map size: " + clientRoomMap.keySet().size());
+                    executorEgressService.submit(new AckEgressTask("open_event",
+                            PushMessage.builder().message(recordEntity.getCaseContent()).build(), client));
 
-                if (recordEntity.lockByClient(client)) {
-                    executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("4").build(), client));
-                } else if (recordEntity.isLockedByClient()) {
-                    LOGGER.info("add client, record is locked by others");
-                    executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+                    if (recordEntity.lockByClient(client)) {
+                        executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("4").build(), client));
+                    } else if (recordEntity.isLockedByClient()) {
+                        LOGGER.info("add client, record is locked by others");
+                        executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
+                    }
+                    executorEgressService.submit(new NotifyEgressTask("connect_notify_event",
+                            PushMessage.builder().message(recordEntity.getClientName()).build(), socketIOServer.getRoomOperations(roomId)));
+
+                    LOGGER.info("connected caseId: " + clientEntity.getCaseIdStr() + ", recordid: " + clientEntity.getRecordId());
                 }
-                executorEgressService.submit(new NotifyEgressTask("connect_notify_event",
-                        PushMessage.builder().message(recordEntity.getClientName()).build(), socketIOServer.getRoomOperations(roomId)));
-
-                LOGGER.info("connected caseId: " + clientEntity.getCaseIdStr() + ", recordid: " + clientEntity.getRecordId());
             }
 
 //            client.joinRoom(roomId);
@@ -225,6 +244,11 @@ public class SocketIOServiceImpl implements SocketIOService {
                 RoomEntity room = clientRoomMap.get(client);
                 if (room == null) return;
                 synchronized (room) {
+                    if (room.isStaleClient(client.getSessionId())) {
+                        executorEgressService.submit(new AckEgressTask("stale_data_event",
+                                PushMessage.builder().message("stale").build(), client));
+                        return;
+                    }
                     new LockIngressTask(client, socketIOServer, room, executorEgressService, data).run();
                 }
             });
@@ -264,13 +288,35 @@ public class SocketIOServiceImpl implements SocketIOService {
             RoomEntity room = clientRoomMap.get(client);
             if (room == null) return;
             synchronized (room) {
-                if (room.isLockedByClient() && !room.lockByClient(client)) {
+                if (room.isStaleClient(client.getSessionId())) {
+                    executorEgressService.submit(new AckEgressTask("stale_data_event",
+                            PushMessage.builder().message("stale").build(), client));
+                    return;
+                }
+                if ((room.isLockedByClient() || RoomEntity.isSourceTaskClient(client)) && !room.lockByClient(client)) {
                     executorEgressService.submit(new AckEgressTask("lock", PushMessage.builder().message("0").build(), client));
                     return;
                 }
                 operation.accept(room);
             }
         });
+    }
+
+    private boolean validateSourceTask(SocketIOClient client) {
+        if (!RoomEntity.isSourceTaskClient(client)) return true;
+        try {
+            Long sourceTaskId = Long.valueOf(client.getHandshakeData().getSingleUrlParam("sourceTaskId"));
+            Long caseId = Long.valueOf(client.getHandshakeData().getSingleUrlParam("caseId"));
+            String recordId = client.getHandshakeData().getSingleUrlParam("recordId");
+            ExecRecord record = recordMapper.selectOne(sourceTaskId);
+            if ("undefined".equals(recordId) && record != null && caseId.equals(record.getCaseId()) &&
+                    !Integer.valueOf(1).equals(record.getIsDelete())) return true;
+        } catch (RuntimeException error) {
+            LOGGER.warn("任务源编辑连接校验失败");
+        }
+        client.sendEvent("source_edit_denied", PushMessage.builder().message("无法编辑源用例，请刷新任务后重试").build());
+        client.disconnect();
+        return false;
     }
 
     @Override

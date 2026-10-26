@@ -16,6 +16,10 @@ public class LockIngressTask extends IngressTask {
 
     @Override
     public void run()  {
+        if (RoomEntity.isSourceTaskClient(client)) {
+            client.sendEvent("lock", PushMessage.builder().message(room.lockByClient(client) ? "4" : "0").build());
+            return;
+        }
         room.lock();
         LOGGER.info(data.getMessage());
         ClientEntity clientEntity = getRoomFromClient(client);

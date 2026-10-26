@@ -39,7 +39,13 @@ public class SaveIngressTask extends IngressTask {
     }
 
     private void saveLocked() {
-        if (room.isLockedByClient() && !room.lockByClient(client)) {
+        if (room.isStaleClient(client.getSessionId())) {
+            executorEgressService.submit(new AckEgressTask("stale_data_event",
+                    PushMessage.builder().message("stale").build(), client));
+            acknowledgeSave("conflict");
+            return;
+        }
+        if ((room.isLockedByClient() || RoomEntity.isSourceTaskClient(client)) && !room.lockByClient(client)) {
             executorEgressService.submit(new AckEgressTask("lock",
                     PushMessage.builder().message("0").build(), client));
             return;
@@ -72,7 +78,13 @@ public class SaveIngressTask extends IngressTask {
                 room.persistCaseContent(client.getHandshakeData().getSingleUrlParam("user"));
                 return;
             }
-            if (room instanceof RecordEntity) room.setCaseContent(data.getCaseContent());
+            if (room instanceof RecordEntity) {
+                if (jsonMapper.readTree(data.getCaseContent()).path("base").asInt() !=
+                        jsonMapper.readTree(room.getCaseContent()).path("base").asInt()) {
+                    throw new IllegalStateException("用例版本冲突，请刷新后重试");
+                }
+                ((RecordEntity) room).persistExecutionRecord(client.getHandshakeData().getSingleUrlParam("user"));
+            }
             else room.acceptSaveContent(data.getCaseContent(), client.getSessionId());
         } catch (Exception error) {
             LOGGER.error("保存内容格式错误", error);

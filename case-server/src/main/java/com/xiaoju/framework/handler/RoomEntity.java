@@ -27,6 +27,8 @@ public class RoomEntity {
     JsonNodeFactory FACTORY;
     ReentrantLock lock;
     private final Map<UUID, Integer> lastForeignEditVersion = new HashMap<>();
+    private final Set<UUID> staleClients = new HashSet<>();
+    private SourceCaseUpdateNotifier sourceCaseUpdateNotifier;
 
     public RoomEntity(String roomId, Long caseId, TestCaseMapper caseMapper) {
         this.roomId = roomId;
@@ -45,7 +47,7 @@ public class RoomEntity {
 
     public synchronized boolean addClient(SocketIOClient client) {
         if (this.clientMap.containsKey(client.getSessionId())) return false;
-        if (this.clientMap.isEmpty() && this.lockClient == null) this.lockClient = client;
+        if (this.lockClient == null && (this.clientMap.isEmpty() || isSourceTaskClient(client))) this.lockClient = client;
         this.clientMap.put(client.getSessionId(), client.getHandshakeData().getSingleUrlParam("user"));
         LOGGER.info("add client, current user number: {}", this.clientMap.size());
         return true;
@@ -66,6 +68,41 @@ public class RoomEntity {
     protected void forgetClient(SocketIOClient client) {
         this.clientMap.remove(client.getSessionId());
         this.lastForeignEditVersion.remove(client.getSessionId());
+        this.staleClients.remove(client.getSessionId());
+    }
+
+    public static boolean isSourceTaskClient(SocketIOClient client) {
+        if (client.getHandshakeData() == null) return false;
+        String taskId = client.getHandshakeData().getSingleUrlParam("sourceTaskId");
+        return taskId != null && !"undefined".equals(taskId);
+    }
+
+    public synchronized boolean isStaleClient(UUID client) {
+        return staleClients.contains(client);
+    }
+
+    protected void invalidateExistingClients(int version) {
+        staleClients.addAll(clientMap.keySet());
+        noteAcceptedEdit(null, version);
+    }
+
+    public synchronized void setSourceCaseUpdateNotifier(SourceCaseUpdateNotifier notifier) {
+        this.sourceCaseUpdateNotifier = notifier;
+    }
+
+    public synchronized void persistAcceptedEdit(SocketIOClient client, String previousContent) throws Exception {
+        try {
+            String modifier = client.getHandshakeData().getSingleUrlParam("user");
+            if (this instanceof RecordEntity) {
+                ((RecordEntity) this).persistExecutionRecord(modifier);
+            } else if (isSourceTaskClient(client)) {
+                if (!lockByClient(client)) throw new IllegalStateException("请先取得用例编辑锁");
+                persistCaseContent(modifier, previousContent);
+            }
+        } catch (Exception error) {
+            setCaseContent(previousContent);
+            throw error;
+        }
     }
 
     public synchronized boolean persistCaseContent(String modifier) throws Exception {
@@ -77,6 +114,9 @@ public class RoomEntity {
         TestCase stored = caseMapper.selectOne(caseId);
         if (stored == null) throw new IllegalStateException("用例不存在");
         JsonNode storedContent = jsonMapper.readTree(stored.getCaseContent());
+        if (saveContent.equals(storedContent)) return true;
+        // 与真正写入数据库的形态比较，避免旧用例的空标签清理造成自己的下一次保存冲突。
+        TreeUtil.caseDFSValidate(saveContent.get("root"));
         int saveVersion = saveContent.path("base").asInt();
         int storedVersion = storedContent.path("base").asInt();
         boolean unchangedSinceEditorRead = previousContent != null &&
@@ -86,12 +126,16 @@ public class RoomEntity {
                         !unchangedSinceEditorRead)) {
             throw new IllegalStateException("用例版本冲突，不能覆盖数据库");
         }
-        if (saveContent.equals(storedContent)) return true;
-        TreeUtil.caseDFSValidate(saveContent.get("root"));
+        if (saveContent.equals(storedContent)) {
+            setCaseContent(saveContent.toString());
+            return true;
+        }
         stored.setCaseContent(saveContent.toString());
         stored.setGmtModified(new Date());
         stored.setModifier(modifier);
         if (caseMapper.update(stored) < 1) throw new IllegalStateException("用例内容更新失败");
+        setCaseContent(saveContent.toString());
+        if (sourceCaseUpdateNotifier != null) sourceCaseUpdateNotifier.notifyUpdated(caseId, saveVersion);
         return true;
     }
 
@@ -103,7 +147,7 @@ public class RoomEntity {
         return this.lockClient != null;
     }
 
-    public void clientLock(SocketIOClient client) {
+    public synchronized void clientLock(SocketIOClient client) {
         this.lockClient = client;
     }
 
@@ -112,7 +156,7 @@ public class RoomEntity {
     }
 
 
-    public void clientUnlock() {
+    public synchronized void clientUnlock() {
         this.lockClient = null;
     }
 
