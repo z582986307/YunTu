@@ -29,6 +29,29 @@ import static org.mockito.Mockito.eq;
 
 public class RoomFreshnessTests {
     @Test
+    public void duplicateConnectForSameSessionDoesNotJoinRoomAgain() {
+        TestCaseMapper mapper = mock(TestCaseMapper.class);
+        TestCase content = new TestCase();
+        content.setCaseContent("{\"base\":1,\"root\":{\"data\":{\"id\":\"root\"},\"children\":[]}}");
+        when(mapper.selectOne(19L)).thenReturn(content);
+        RoomEntity room = new RoomEntity("19", 19L, mapper);
+        UUID session = UUID.randomUUID();
+        SocketIOClient first = mock(SocketIOClient.class);
+        SocketIOClient duplicate = mock(SocketIOClient.class);
+        HandshakeData handshake = mock(HandshakeData.class);
+        when(first.getSessionId()).thenReturn(session);
+        when(duplicate.getSessionId()).thenReturn(session);
+        when(first.getHandshakeData()).thenReturn(handshake);
+        when(duplicate.getHandshakeData()).thenReturn(handshake);
+        when(handshake.getSingleUrlParam("user")).thenReturn("editor");
+
+        assertTrue(room.addClient(first));
+        assertFalse(room.addClient(duplicate));
+        assertEquals(1, room.getClientNum());
+        assertTrue(room.lockByClient(duplicate));
+    }
+
+    @Test
     public void concurrentFirstConnectionsShareOneRoom() throws Exception {
         TestCaseMapper mapper = mock(TestCaseMapper.class);
         TestCase content = new TestCase();

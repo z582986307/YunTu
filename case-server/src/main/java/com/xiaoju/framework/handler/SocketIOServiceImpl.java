@@ -104,7 +104,7 @@ public class SocketIOServiceImpl implements SocketIOService {
             String roomId = clientEntity.getRoomId();
             if (null == clientEntity.getRecordId()) {
                 RoomEntity roomEntity = RoomFactory.getRoom(roomId, clientEntity.getCaseId(), caseMapper);
-                roomEntity.addClient(client);
+                if (!roomEntity.addClient(client)) return;
                 clientRoomMap.put(client, roomEntity);
                 client.joinRoom(roomId);
                 LOGGER.info("add case client room map size: " + clientRoomMap.keySet().size());
@@ -124,7 +124,7 @@ public class SocketIOServiceImpl implements SocketIOService {
 
             } else {
                 RecordEntity recordEntity = RecordFactory.getRoom(roomId, clientEntity.getCaseId(), caseMapper, clientEntity.getRecordId(), recordMapper);
-                recordEntity.addClient(client);
+                if (!recordEntity.addClient(client)) return;
                 clientRoomMap.put(client, recordEntity);
                 client.joinRoom(roomId);
                 LOGGER.info("add record client room map size: " + clientRoomMap.keySet().size());

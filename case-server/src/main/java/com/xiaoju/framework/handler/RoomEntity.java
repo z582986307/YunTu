@@ -43,11 +43,12 @@ public class RoomEntity {
         }
     }
 
-    public synchronized void addClient(SocketIOClient client) {
+    public synchronized boolean addClient(SocketIOClient client) {
+        if (this.clientMap.containsKey(client.getSessionId())) return false;
         if (this.clientMap.isEmpty() && this.lockClient == null) this.lockClient = client;
         this.clientMap.put(client.getSessionId(), client.getHandshakeData().getSingleUrlParam("user"));
-        LOGGER.info("add client, current user number:" + this.clientMap.size() + ", name: " + client.getHandshakeData().getSingleUrlParam("user"));
-
+        LOGGER.info("add client, current user number: {}", this.clientMap.size());
+        return true;
     }
 
     public synchronized void removeClient(SocketIOClient client) {
@@ -100,7 +101,7 @@ public class RoomEntity {
     }
 
     public boolean lockByClient(SocketIOClient client) {
-        return this.lockClient == client;
+        return this.lockClient != null && this.lockClient.getSessionId().equals(client.getSessionId());
     }
 
 

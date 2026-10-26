@@ -882,10 +882,10 @@ class KityminderEditor extends Component {
     window.ws = this.ws;
     const query = this.props.wsParam && this.props.wsParam.query;
     const currentUser = query && query.user;
-    this.setState({
+    this.setState(state => ({
       wsConnected: true,
-      nowUseList: normalizeOnlineUsers('', currentUser),
-    });
+      nowUseList: state.nowUseList.length ? state.nowUseList : normalizeOnlineUsers('', currentUser),
+    }));
     // this.heartCheck.reset().start(this.ws);
     console.log("handle ws open", window.ws);
   };
@@ -926,7 +926,6 @@ class KityminderEditor extends Component {
   }
 
   handleWsUserStat = (data) => {
-    console.log( 'user info , ', data);
     const query = this.props.wsParam && this.props.wsParam.query;
     const currentUser = query && query.user;
     this.setState({
