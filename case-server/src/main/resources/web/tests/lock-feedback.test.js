@@ -9,7 +9,7 @@ const axios = fs.readFileSync(path.resolve(__dirname, '../src/utils/axios.js'), 
 
 test('被锁定页面按用例和任务分别给出明确提示', () => {
   expect(editor).toContain("this.props.progressShow ? '当前任务已锁定，不可执行' : '当前用例已锁定，不可编辑'")
-  expect(editor).toContain("locked ? '已锁定，仅当前用户可操作' : '已解锁，可锁定'")
+  expect(editor).toContain("locked ? '已锁定，仅当前用户可操作' : '已解锁，所有用户均可操作'")
   expect(editor).toContain('<span className="yuntu-lock-wrap">')
 })
 

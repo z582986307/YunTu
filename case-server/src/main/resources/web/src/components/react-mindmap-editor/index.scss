@@ -364,6 +364,8 @@
   &::after {
     top: 3px;
     left: 3px;
+    margin-left: 0;
+    transform: none;
     width: 16px;
     height: 16px;
     background-color: #fff;
@@ -390,8 +392,9 @@
     background-color: #faad14;
 
     &::after {
-      left: 100%;
-      margin-left: -19px;
+      left: calc(100% - 19px);
+      margin-left: 0;
+      transform: none;
     }
 
     .ant-switch-inner .anticon {

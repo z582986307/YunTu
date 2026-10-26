@@ -1320,7 +1320,7 @@ class KityminderEditor extends Component {
                 </Popover>,
                 <Tooltip
                   key="lock"
-                  title={isLock ? '已锁定，不可操作' : (locked ? '已锁定，仅当前用户可操作' : '已解锁，可锁定')}
+                  title={isLock ? '已锁定，不可操作' : (locked ? '已锁定，仅当前用户可操作' : '已解锁，所有用户均可操作')}
                   getPopupContainer={triggerNode => triggerNode.parentNode}
                 >
                   {type !== 'compare' && (
