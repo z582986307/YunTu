@@ -110,7 +110,7 @@ class KityminderEditor extends Component {
     };
     this.base = -1;
     this.expectedBase = -1;
-    this.saveBarrier = new SaveBarrier();
+    this.saveBarrier = new SaveBarrier(undefined, this.handleSaveSettled);
     this.pendingInputs = new Set();
     this.navNode = createRef();
   }
@@ -124,7 +124,7 @@ class KityminderEditor extends Component {
   componentWillUnmount() {
     this.persistViewState();
     this.unmounted = true;
-    this.saveBarrier.fail(new Error('编辑器已关闭，保存未完成'));
+    this.saveBarrier.fail(new Error('编辑器已关闭，保存未完成'), true);
     this.pendingInputs.clear();
     clearTimeout(this.autoSaveTimer);
     clearTimeout(this.viewStateTimer);
@@ -178,10 +178,19 @@ class KityminderEditor extends Component {
     });
   };
   canOperate = () => Boolean(this.minder && !this.unmounted && !this.pageBlocked &&
+    !this.saveBarrier.error &&
     !this.state.loading && !this.state.isLock && this.state.wsConnected &&
     (!this.props.sourceEditing || this.state.locked));
-  canEditContent = () => this.canOperate() && !this.props.readOnly && !this.historyPending &&
+  canEditContent = () => this.canApplyPendingImage() && !this.savePreparing && !this.historyPreparing && !this.unconfirmedWriteFailure;
+  canApplyPendingImage = () => this.canOperate() && !this.props.readOnly && !this.historyPending &&
     !this.saveBarrier.awaitingAck;
+  insertPendingImage = (url, title) => {
+    // 准备阶段只允许已登记图片继续落图；历史命令发出后仍禁止新的图片命令。
+    if (!this.canApplyPendingImage()) throw new Error('编辑器已关闭或失去操作权，图片未插入');
+    this.applyingPendingImage = true;
+    try { return this.minder.execCommand('image', url, title); }
+    finally { this.applyingPendingImage = false; }
+  };
   notifyOperationState = () => {
     this.syncInputOwnership();
     if (this.props.onOperationStateChanged) this.props.onOperationStateChanged(this.canOperate());
@@ -255,7 +264,8 @@ class KityminderEditor extends Component {
     const { readOnly } = this.props;
     minder.setOption('externalImageViewerHandling', true);
     minder.on('beforeExecCommand', event => {
-      if (this.props.sourceEditing && !this.canEditContent() &&
+      const admittedImage = event.commandName === 'image' && this.applyingPendingImage && this.canApplyPendingImage();
+      if (((this.props.sourceEditing && !this.canEditContent()) || this.savePreparing || this.historyPreparing) && !admittedImage &&
           !['zoom', 'zoomin', 'zoomout', 'camera', 'hand', 'expand', 'expandtolevel'].includes(event.commandName)) {
         event.stopPropagationImmediately();
       }
@@ -396,7 +406,7 @@ class KityminderEditor extends Component {
     if (!this.canEditContent()) return;
     if (!this.minder || !node) return;
     this.trackImageWork(pasteImageIntoNode(file, node, this.minder, this.props.baseUrl, this.props.uploadUrl,
-      () => !this.unmounted && this.canEditContent()))
+      this.canApplyPendingImage, this.insertPendingImage))
       .catch(error => message.error(error.message || '图片粘贴失败，请重试'));
   };
   trackImageWork = promise => this.saveBarrier.track(promise);
@@ -596,7 +606,7 @@ class KityminderEditor extends Component {
   //   this.setState({ undoCnt: undoCnt + 1, redoCnt: redoCnt - 1 });
   // };
   handleKeyDown = event => {
-    if (this.pageBlocked || this.historyPending || this.saveBarrier.awaitingAck || this.state.isLock) return;
+    if (!this.canOperate() || this.savePreparing || this.historyPreparing || this.historyPending || this.saveBarrier.awaitingAck || this.state.isLock) return;
     const e = event;
     const ctrlKey = e.metaKey || e.ctrlKey;
     const hasModal =
@@ -852,7 +862,7 @@ class KityminderEditor extends Component {
     }
   };
   handleWsClose = e => {
-    this.saveBarrier.fail(new Error('连接已断开，保存未完成，请保留当前编辑内容'));
+    this.saveBarrier.fail(new Error('连接已断开，保存未完成，请保留当前编辑内容'), true);
     this.setState({ wsConnected: false, nowUseList: [] }, this.notifyOperationState);
     if (this.props.sourceEditing) {
       message.error('连接已断开，源用例尚未确认保存，请保留编辑内容');
@@ -1087,7 +1097,7 @@ class KityminderEditor extends Component {
     editInput(node, this.inputNode);
   };
   handleExecutionChange = (field, nodes, value, apply) => {
-    if (!this.canOperate() || this.historyPending || this.saveBarrier.awaitingAck) return;
+    if (!this.canOperate() || this.savePreparing || this.historyPreparing || this.historyPending || this.saveBarrier.awaitingAck) return;
     const patches = buildNodeDataPatches(nodes.filter(Boolean), field, value);
     if (!patches.length) return;
     const inversePatches = invertNodeDataPatches(patches);
@@ -1252,12 +1262,16 @@ class KityminderEditor extends Component {
 
   handleEditAck = () => {
     this.pendingEditCount = Math.max(0, (this.pendingEditCount || 0) - 1);
+    if (!this.pendingEditCount && !this.historyPending) {
+      this.unconfirmedWriteFailure = false;
+      this.setState({ writeUnconfirmed: false }, this.syncInputOwnership);
+    }
     this.saveBarrier.notify();
     this.flushQueuedSave();
   };
 
   flushQueuedSave = () => {
-    if (!this.saveBarrier.pending && !this.saveInFlight && !this.historyPending &&
+    if (!this.retryNeedsValidation && !this.saveBarrier.pending && !this.saveInFlight && !this.historyPending &&
         !(this.pendingEditCount || 0) && this.queuedSaveManual !== undefined &&
         this.expectedBase <= this.minder.getBase()) {
       const manual = this.queuedSaveManual;
@@ -1291,17 +1305,35 @@ class KityminderEditor extends Component {
 
   saveAndWait = () => this.saveBarrier.save(async () => {
     if (!this.canOperate()) throw new Error('当前尚未加载或没有操作权，无法确认保存');
+    if (this.unconfirmedWriteFailure) throw new Error('变更确认状态未知，输入已保留；不能安全重发，请勿关闭当前页面');
+    const operation = this.saveBarrier.pending;
+    const requireCurrent = () => {
+      if (this.saveBarrier.pending !== operation) throw new Error('本次保存等待已结束，未发送新的保存');
+    };
     this.commitCurrentInput();
     this.pendingInputs.forEach(commit => commit());
+    this.savePreparing = true;
+    this.setState({ saving: true }, this.syncInputOwnership);
     if (!this.props.readOnly) this.minder.fire('contentchange');
     clearTimeout(this.autoSaveTimer);
     this.queuedSaveManual = undefined;
     await this.saveBarrier.waitForUploads();
+    requireCurrent();
     if (this.state.showEditImage || document.getElementsByClassName('yuntu-modal').length) {
       throw new Error('请先完成或关闭当前弹窗，再保存或结束编辑');
     }
-    await this.saveBarrier.waitUntil(() => !this.saveInFlight && !this.historyPending &&
+    await this.saveBarrier.waitUntil(() => !this.saveInFlight && !this.historyPreparing && !this.historyPending &&
       !(this.pendingEditCount || 0) && this.expectedBase <= this.minder.getBase());
+    requireCurrent();
+    if (this.retryNeedsValidation) {
+      const socket = this.ws;
+      const base = this.minder.getBase();
+      if (!socket || !socket.confirmCurrentVersion) throw new Error('尚未核实连接和版本，保存未完成');
+      await socket.confirmCurrentVersion(base);
+      requireCurrent();
+      if (this.ws !== socket || this.minder.getBase() !== base) throw new Error('连接或版本已变化，请保留输入后重试');
+      this.retryNeedsValidation = false;
+    }
     if (!this.canOperate()) throw new Error('当前连接不可操作，保存未完成');
   }, () => {
     this.saveCurrentCase(true);
@@ -1309,19 +1341,28 @@ class KityminderEditor extends Component {
   });
 
   onButtonSave = () => this.saveAndWait().catch(error => message.error(error.message || '保存未完成，请重试'));
+  handleSaveSettled = error => {
+    this.savePreparing = false;
+    if (error) this.retryNeedsValidation = true;
+    if (!this.unmounted) this.setState({ saving: false }, this.syncInputOwnership);
+  };
 
   beginSourceHistory = async () => {
     if (!this.canEditContent()) return false;
     try {
       this.commitCurrentInput();
       this.pendingInputs.forEach(commit => commit());
-      this.historyPending = true;
+      this.historyPreparing = true;
       this.setState({ historyPending: true }, this.syncInputOwnership);
+      await this.saveBarrier.waitForUploads();
       await this.saveBarrier.waitUntil(() => !(this.pendingEditCount || 0) &&
         !this.saveInFlight && this.expectedBase <= this.minder.getBase());
+      this.historyPreparing = false;
+      this.historyPending = true;
       return !this.unmounted && !this.pageBlocked;
     } catch (error) {
       this.historyPending = false;
+      this.historyPreparing = false;
       if (!this.unmounted) this.setState({ historyPending: false }, this.syncInputOwnership);
       message.error(error.message || '历史操作未完成');
       return false;
@@ -1335,37 +1376,41 @@ class KityminderEditor extends Component {
     this.expectedBase = this.minder.getBase();
     if (this.groupNode) this.groupNode.syncBase(this.expectedBase);
     this.historyPending = false;
+    this.unconfirmedWriteFailure = false;
     this.hasLocalEdits = true;
-    this.setState({ historyPending: false }, this.syncInputOwnership);
+    this.setState({ historyPending: false, writeUnconfirmed: false }, this.syncInputOwnership);
     this.saveBarrier.notify();
     this.flushQueuedSave();
   };
   handleSourceEditDenied = () => {
-    this.saveBarrier.fail(new Error('源用例被占用或无法编辑'));
+    this.saveBarrier.fail(new Error('源用例被占用或无法编辑'), true);
     if (this.props.onSourceEditDenied) this.props.onSourceEditDenied();
   };
   handleSocketFailure = () => {
+    this.retryNeedsValidation = true;
+    // warning 没有写入 ID；仍有未确认内容时不能证明哪一条已落库，不能盲目重发。
+    this.unconfirmedWriteFailure = Boolean((this.pendingEditCount || 0) > 0 || this.historyPending);
+    this.setState({ writeUnconfirmed: this.unconfirmedWriteFailure }, this.syncInputOwnership);
     this.saveBarrier.fail(new Error('服务端未能保存变更，请保留编辑内容并重试'));
     message.error('服务端未能保存变更，请保留编辑内容并重试');
   };
 
   handleSaveAck = result => {
     this.saveInFlight = false;
-    this.setState({ saving: false }, this.syncInputOwnership);
-    this.saveBarrier.ack(result);
+    const acknowledged = this.saveBarrier.ack(result);
     this.saveBarrier.notify();
     if (result === 'conflict') this.handleDataStale();
     else if (result !== 'ok') message.error('保存失败，请重试');
-    else if (this.manualSavePending) message.success('保存成功');
+    else if (acknowledged && this.manualSavePending) message.success('保存成功');
     this.manualSavePending = false;
-    if (result === 'ok' && this.props.onSaveAcknowledged) this.props.onSaveAcknowledged();
+    if (acknowledged && result === 'ok' && this.props.onSaveAcknowledged) this.props.onSaveAcknowledged();
     this.flushQueuedSave();
   };
 
   blockUntilRefresh = text => {
     if (this.pageBlocked) return;
     this.pageBlocked = true;
-    this.saveBarrier.fail(new Error(text));
+    this.saveBarrier.fail(new Error(text), true);
     this.notifyOperationState();
     clearTimeout(this.autoSaveTimer);
     if (this.ws) {
@@ -1423,9 +1468,11 @@ class KityminderEditor extends Component {
     const childProps = {
       ...this.props,
       minder,
-      isLock: isLock || loading || this.state.historyPending || this.state.saving || (this.props.sourceEditing && !locked),
+      isLock: isLock || loading || this.state.historyPending || this.state.saving || this.state.writeUnconfirmed || (this.props.sourceEditing && !locked),
       trackImageWork: this.trackImageWork,
-      isEditorActive: () => !this.unmounted && this.canEditContent(),
+      isEditorActive: this.canApplyPendingImage,
+      isUserInputAllowed: this.canEditContent,
+      insertImage: this.insertPendingImage,
       registerPendingInput: this.registerPendingInput,
     };
 
@@ -1463,7 +1510,7 @@ class KityminderEditor extends Component {
               onSourceEditDenied={this.handleSourceEditDenied}
               handleSourceRevision={this.handleSourceRevision}
               onFailure={this.handleSocketFailure}
-              onConnectionLost={() => this.saveBarrier.fail(new Error('连接已断开，保存未完成'))}
+              onConnectionLost={() => this.saveBarrier.fail(new Error('连接已断开，保存未完成'), true)}
               // onError={e => {
               //   notification.info({
               //     message: 'websocket连接错误，错误详情：' + e,
@@ -1735,7 +1782,9 @@ class KityminderEditor extends Component {
               baseUrl={this.props.baseUrl}
               uploadUrl={this.props.uploadUrl}
               trackImageWork={this.trackImageWork}
-              isEditorActive={() => !this.unmounted && this.canEditContent()}
+              isEditorActive={this.canApplyPendingImage}
+              isUserInputAllowed={this.canEditContent}
+              insertImage={this.insertPendingImage}
               onCancel={() => this.setState({ showEditImage: false, pastedImageFile: null })}
             />
           )}

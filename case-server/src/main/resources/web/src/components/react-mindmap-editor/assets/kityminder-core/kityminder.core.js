@@ -2237,7 +2237,12 @@
           if (this._paintGroups) this._paintGroups.dispose();
           var modules = this._modules;
           window.removeEventListener('resize', this._firePharseHandler);
-          this._paper.off('click dblclick mousedown contextmenu mouseup mousemove mouseover mousewheel DOMMouseScroll touchstart touchmove touchend dragenter dragleave drop', this._firePharseHandler);
+          // kity 2.0.4 的 on 支持多事件字符串，off 只接受单个事件名。
+          var paper = this._paper;
+          var handler = this._firePharseHandler;
+          'click dblclick mousedown contextmenu mouseup mousemove mouseover mousewheel DOMMouseScroll touchstart touchmove touchend dragenter dragleave drop'.split(' ').forEach(function (type) {
+            paper.off(type, handler);
+          });
           (this._globalDisposers || []).forEach(function (dispose) { dispose(); });
           this._globalDisposers = [];
           (this._imageLoadCancels || []).slice().forEach(function (cancel) { cancel(); });
@@ -3733,7 +3738,7 @@
               return support.call(this, node);
             },
             getBase: function () {
-              return this._base || 1;
+              return this._base === 0 ? 0 : (this._base || 1);
             },
             setBase: function (base) {
               this._base = base ? Number(base) : 0;

@@ -31,15 +31,21 @@ test('源备注输入注册保存前 flush，卸载取消防抖，不能晚到�
   const minder = { queryCommandValue: () => '', getSelectedNode: () => node,
     execCommand: (name, value) => { note = value; }, fire: () => {} };
   let flush;
+  let inputAllowed = true;
   let unregistered = false;
   const registerPendingInput = commit => { flush = commit; return () => { unregistered = true; }; };
   try {
-    act(() => { ReactDOM.render(<NoteDrawer minder={minder} visible registerPendingInput={registerPendingInput} />, holder); });
+    act(() => { ReactDOM.render(<NoteDrawer minder={minder} visible registerPendingInput={registerPendingInput}
+      isUserInputAllowed={() => inputAllowed} />, holder); });
     const input = holder.querySelector('textarea');
     act(() => { Simulate.change(input, { target: { value: 'draft' } }); });
     expect(typeof flush).toBe('function');
     act(() => flush());
     expect(note).toBe('draft');
+    inputAllowed = false;
+    act(() => { Simulate.change(input, { target: { value: 'blocked' } }); flush(); });
+    expect(note).toBe('draft');
+    inputAllowed = true;
     act(() => { Simulate.change(input, { target: { value: 'later' } }); });
     act(() => { ReactDOM.unmountComponentAtNode(holder); });
     jest.runAllTimers();

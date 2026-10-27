@@ -1,7 +1,7 @@
 /* eslint-env jest */
 import SaveBarrier from '../src/components/react-mindmap-editor/util/saveBarrier';
 
-const tick = () => Promise.resolve().then(() => Promise.resolve());
+const tick = async () => { for (let i = 0; i < 15; i += 1) await Promise.resolve(); };
 
 test('保存等待在途编辑与上传完成，并且只有真实成功确认才返回', async () => {
   const barrier = new SaveBarrier(1000);
@@ -62,4 +62,51 @@ test('保存超时明确失败', async () => {
   jest.advanceTimersByTime(21);
   await rejection;
   jest.useRealTimers();
+});
+
+test('保存超时后可重试，但迟到旧确认只排空旧请求，不能兑现新保存', async () => {
+  jest.useFakeTimers();
+  const barrier = new SaveBarrier(20);
+  let requests = 0;
+  const first = barrier.save(() => {}, () => { requests += 1; });
+  await tick();
+  const failed = expect(first).rejects.toThrow('超时');
+  jest.advanceTimersByTime(21);
+  await failed;
+  const second = barrier.save(() => {}, () => { requests += 1; });
+  second.catch(() => {});
+  let completed = false;
+  second.then(() => { completed = true; }, () => {});
+  await tick();
+  expect(requests).toBe(1);
+  barrier.ack('ok');
+  await tick();
+  expect(completed).toBe(false);
+  expect(requests).toBe(2);
+  barrier.ack('ok');
+  await second;
+  jest.useRealTimers();
+});
+
+test('卸载等终止错误不能被后续保存当成可恢复失败', async () => {
+  const barrier = new SaveBarrier(1000);
+  barrier.fail(new Error('编辑器已关闭'), true);
+  await expect(barrier.save(() => {}, () => {})).rejects.toThrow('已关闭');
+});
+
+test('旧准备过程晚到失败不能拒绝新的保存等待', async () => {
+  const barrier = new SaveBarrier(1000);
+  let failOldPrepare;
+  const first = barrier.save(() => new Promise((resolve, reject) => { failOldPrepare = reject; }), () => {});
+  const rejected = expect(first).rejects.toThrow('单次失败');
+  await tick();
+  barrier.fail(new Error('单次失败'));
+  await rejected;
+  const second = barrier.save(() => {}, () => {});
+  await tick();
+  failOldPrepare(new Error('晚到错误'));
+  await tick();
+  expect(barrier.awaitingAck).toBe(true);
+  barrier.ack('ok');
+  await second;
 });

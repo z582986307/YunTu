@@ -20,6 +20,7 @@ const NoteDrawer = (props) => {
   );
 
   const handleChange = (newValue) => {
+    if (props.isUserInputAllowed && !props.isUserInputAllowed()) return;
     setValue(newValue);
     debouncedUpdate(newValue, minder.getSelectedNode());
   };

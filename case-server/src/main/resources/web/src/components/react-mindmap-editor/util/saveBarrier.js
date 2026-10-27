@@ -1,7 +1,8 @@
 // 只由真实服务端确认完成保存；超时仅失败，不推测成功。
 export default class SaveBarrier {
-  constructor(timeout = 30000) {
+  constructor(timeout = 30000, onSettled) {
     this.timeout = timeout;
+    this.onSettled = onSettled;
     this.uploads = new Set();
     this.waiters = new Set();
   }
@@ -13,9 +14,11 @@ export default class SaveBarrier {
       throw error;
     }).then(value => {
       this.uploads.delete(tracked);
+      this.notify();
       return value;
     }, error => {
       this.uploads.delete(tracked);
+      this.notify();
       throw error;
     });
     this.uploads.add(tracked);
@@ -23,7 +26,7 @@ export default class SaveBarrier {
   }
 
   async waitForUploads() {
-    while (this.uploads.size) await Promise.all(Array.from(this.uploads));
+    await this.waitUntil(() => this.uploads.size === 0);
     if (this.uploadError) throw this.uploadError;
   }
 
@@ -60,16 +63,26 @@ export default class SaveBarrier {
     this.timer = setTimeout(() => this.fail(new Error('保存确认超时，请检查连接后重试')), this.timeout);
     Promise.resolve().then(prepare).then(() => {
       if (this.pending !== pending) return;
+      return this.waitUntil(() => !this.orphanedAck);
+    }).then(() => {
+      if (this.pending !== pending) return;
       this.awaitingAck = true;
       request();
-    }).catch(error => this.finish(error));
+    }).catch(error => { if (this.pending === pending) this.finish(error); });
     return pending;
   }
 
   ack(result) {
-    if (!this.awaitingAck) return;
+    // 协议没有请求 ID；超时请求的迟到确认必须先排空，不能兑现后来的保存。
+    if (this.orphanedAck) {
+      this.orphanedAck = false;
+      this.notify();
+      return false;
+    }
+    if (!this.awaitingAck) return false;
     this.finish(result === 'ok' ? null : new Error(result === 'conflict'
       ? '当前数据已变更，保存未完成' : '保存失败，请重试'));
+    return true;
   }
 
   finish(error) {
@@ -80,10 +93,12 @@ export default class SaveBarrier {
     this.awaitingAck = false;
     this.resolve = this.reject = null;
     settle(error);
+    if (this.onSettled) this.onSettled(error);
   }
 
-  fail(error = new Error('连接已关闭，保存未完成')) {
-    this.error = error;
+  fail(error = new Error('连接已关闭，保存未完成'), terminal = false) {
+    if (terminal) this.error = error;
+    if (this.awaitingAck) this.orphanedAck = true;
     this.finish(error);
     this.waiters.forEach(waiter => {
       clearTimeout(waiter.timer);

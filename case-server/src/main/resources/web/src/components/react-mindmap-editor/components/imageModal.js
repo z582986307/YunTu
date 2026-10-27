@@ -23,6 +23,7 @@ const ImageModal = (props) => {
   });
 
   const onOk = () => {
+    if (props.isUserInputAllowed && !props.isUserInputAllowed()) return;
     const { form, minder, onCancel } = props;
     form.validateFields(['title'], (err, values) => {
       if (err) {
@@ -35,13 +36,14 @@ const ImageModal = (props) => {
       setBusy(true);
       track(checkImage(uploadedUrl).then(async () => {
         if (!active()) throw new Error('编辑器已关闭或失去操作权，图片未插入');
-        await minder.execCommand('image', uploadedUrl, values.title);
+        await (props.insertImage ? props.insertImage(uploadedUrl, values.title) : minder.execCommand('image', uploadedUrl, values.title));
         if (active()) onCancel();
       })).catch(error => alive.current && message.error(error.message))
         .then(() => alive.current && setBusy(false));
     });
   };
   const selectImage = (file, success) => {
+    if (props.isUserInputAllowed && !props.isUserInputAllowed()) return;
     const sequence = ++uploadSequence.current;
     setBusy(true);
     track(uploadImage(file, baseUrl, uploadUrl).then(url => checkImage(url).then(() => url))).then(url => {

@@ -27,10 +27,10 @@ export const uploadImage = (file, baseUrl = '', uploadUrl = '') => {
   }).then(getUploadedImageUrl)
 }
 
-export const pasteImageIntoNode = (file, node, minder, baseUrl = '', uploadUrl = '', isActive = () => true) =>
+export const pasteImageIntoNode = (file, node, minder, baseUrl = '', uploadUrl = '', isActive = () => true, insertImage) =>
   uploadImage(file, baseUrl, uploadUrl).then(async url => {
     if (!isActive()) throw new Error('编辑器已关闭或失去操作权，图片未插入')
     minder.select(node, true)
-    await minder.execCommand('image', url, '')
+    await (insertImage ? insertImage(url, '') : minder.execCommand('image', url, ''))
     return url
   })

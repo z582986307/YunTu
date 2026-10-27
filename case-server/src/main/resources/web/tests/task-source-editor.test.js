@@ -2,6 +2,8 @@
 import jsonDiff from 'fast-json-patch';
 import Editor from '../src/components/react-mindmap-editor';
 import DoGroup from '../src/components/react-mindmap-editor/toolbar/DoGroup';
+import fs from 'fs';
+import path from 'path';
 
 jest.mock('kity', () => ({}));
 jest.mock('antd/es/locale/zh_CN', () => ({}));
@@ -172,4 +174,153 @@ test('断开连接后在线人数归零并通知页面停用操作入口', () =>
   expect(f.editor.state.wsConnected).toBe(false);
   expect(f.editor.state.nowUseList).toEqual([]);
   expect(ready).toBe(false);
+});
+
+test('保存准备等待旧编辑期间冻结新节点输入和执行备注写入', async () => {
+  const f = setup();
+  f.editor.pendingEditCount = 1;
+  const pending = f.editor.saveAndWait();
+  await flush();
+  expect(f.editor.canEditContent()).toBe(false);
+  const node = { parent: null, getData: key => f.data().root.data[key] };
+  f.editor.handleExecutionChange('note', [node], 'late draft', () => { f.data().root.data.note = 'late draft'; });
+  f.editor.handleEditInput({ target: { value: 'late text' } });
+  expect(f.data().root.data.note).toBeUndefined();
+  expect(f.editor.state.showEdit).toBe(false);
+  f.editor.handleEditAck();
+  await flush();
+  f.editor.handleSaveAck('ok');
+  await pending;
+});
+
+test('历史准备先排空已登记图片及其编辑确认，随后才发送撤销', async () => {
+  const f = setup();
+  f.data().root.data.text = 'after';
+  f.editor.groupNode.changed();
+  let finishImage;
+  f.editor.trackImageWork(new Promise(resolve => { finishImage = () => {
+    f.data().root.data.image = '/synthetic.png';
+    f.minder.fire('contentchange');
+    resolve();
+  }; }));
+  const pending = f.editor.groupNode.undo({});
+  await flush();
+  expect(f.sent).toEqual([]);
+  expect(f.editor.canEditContent()).toBe(false);
+  finishImage();
+  await flush();
+  expect(f.sent.map(item => item.type)).toEqual(['edit']);
+  f.data().base = 2;
+  f.editor.handleEditAck();
+  await pending;
+  expect(f.sent.map(item => item.type)).toEqual(['edit', 'undo']);
+  f.editor.handleSourceRevision('[{"op":"replace","path":"/base","value":3}]');
+});
+
+test('无未确认内容的 warning 可经当前连接和版本检查后重新保存', async () => {
+  const f = setup();
+  f.editor.ws.confirmCurrentVersion = jest.fn(() => Promise.resolve());
+  f.editor.handleSocketFailure();
+  const pending = f.editor.saveAndWait();
+  pending.catch(() => {});
+  await flush();
+  expect(f.editor.ws.confirmCurrentVersion).toHaveBeenCalledWith(1);
+  expect(f.sent.map(item => item.type)).toEqual(['save']);
+  f.editor.handleSaveAck('ok');
+  await pending;
+});
+
+test.each(['save', 'history'])('%s 准备冻结用户但已登记上传仍可通过受限入口完成插图并等待确认', async operation => {
+  const f = setup();
+  f.data().root.data.text = 'after';
+  f.editor.groupNode.changed();
+  f.editor.initOnEvent(f.minder);
+  f.minder.execCommand = (name, url) => {
+    let blocked = false;
+    f.events.beforeExecCommand({ commandName: name, stopPropagationImmediately: () => { blocked = true; } });
+    if (blocked) return false;
+    f.data().root.data.image = url;
+    f.minder.fire('contentchange');
+    return Promise.resolve();
+  };
+  let finishUpload;
+  f.editor.trackImageWork(new Promise(resolve => { finishUpload = resolve; }).then(() => f.editor.insertPendingImage('/synthetic.png', '')));
+  const pending = operation === 'save' ? f.editor.saveAndWait() : f.editor.groupNode.undo({});
+  await flush();
+  expect(f.editor.canEditContent()).toBe(false);
+  finishUpload();
+  await flush();
+  expect(f.data().root.data.image).toBe('/synthetic.png');
+  expect(f.sent.map(item => item.type)).toEqual(['edit']);
+  f.data().base = 2;
+  f.editor.handleEditAck();
+  await flush();
+  if (operation === 'save') {
+    f.editor.handleSaveAck('ok');
+    await pending;
+  } else {
+    await pending;
+    expect(f.sent.map(item => item.type)).toEqual(['edit', 'undo']);
+    f.editor.handleSourceRevision('[{"op":"replace","path":"/base","value":3}]');
+  }
+});
+
+test('超时后的迟到确认不算新保存成功，重试先核实当前连接版本', async () => {
+  jest.useFakeTimers();
+  try {
+    const f = setup();
+    f.editor.saveBarrier.timeout = 20;
+    f.editor.ws.confirmCurrentVersion = jest.fn(() => Promise.resolve());
+    const first = f.editor.saveAndWait();
+    const failed = expect(first).rejects.toThrow('超时');
+    await flush();
+    jest.advanceTimersByTime(21);
+    await failed;
+    expect(f.editor.canEditContent()).toBe(true);
+    const second = f.editor.saveAndWait();
+    let completed = false;
+    second.then(() => { completed = true; }, () => {});
+    await flush();
+    expect(f.sent.map(item => item.type)).toEqual(['save']);
+    f.editor.handleSaveAck('ok');
+    await flush();
+    expect(f.editor.ws.confirmCurrentVersion).toHaveBeenCalledWith(1);
+    expect(f.sent.map(item => item.type)).toEqual(['save', 'save']);
+    expect(completed).toBe(false);
+    f.editor.handleSaveAck('ok');
+    await second;
+  } finally { jest.useRealTimers(); }
+});
+
+test('warning 后未确认内容不可盲目重发，保留输入并明确给出安全失败', async () => {
+  const f = setup();
+  f.editor.pendingEditCount = 1;
+  f.editor.handleSocketFailure();
+  await expect(f.editor.saveAndWait()).rejects.toThrow('确认状态未知');
+  expect(f.editor.saveBarrier.error).toBeUndefined();
+  expect(f.editor.pendingEditCount).toBe(1);
+  expect(f.sent).toEqual([]);
+  expect(f.data().root.data.text).toBe('before');
+});
+
+test('重试版本校验失败不发送保存，也不宣称成功', async () => {
+  const f = setup();
+  f.editor.ws.confirmCurrentVersion = () => Promise.reject(new Error('版本不一致'));
+  f.editor.handleSocketFailure();
+  await expect(f.editor.saveAndWait()).rejects.toThrow('版本不一致');
+  expect(f.sent).toEqual([]);
+  expect(f.editor.state.saving).toBe(false);
+});
+
+test('base 0 的新任务首次执行补丁必须携带 0，而不是 1', () => {
+  const f = setup({ sourceEditing: false, readOnly: true, progressShow: true });
+  const core = fs.readFileSync(path.join(__dirname, '../src/components/react-mindmap-editor/assets/kityminder-core/kityminder.core.js'), 'utf8');
+  f.minder.getBase = Function(`return (${core.match(/getBase:\s*(function \(\) \{[^}]*\})/)[1]});`)();
+  f.minder._base = 0;
+  f.editor.expectedBase = 0;
+  const node = { parent: null, getData: key => f.data().root.data[key] };
+  f.editor.handleExecutionChange('progress', [node], 1, () => { f.data().root.data.progress = 1; });
+  expect(f.sent[0].type).toBe('edit');
+  expect(f.sent[0].payload.caseVersion).toBe(0);
+  expect(f.editor.expectedBase).toBe(1);
 });

@@ -45,6 +45,7 @@ class Socket extends React.Component {
 
         websocket.on('disconnect', async () => {
             if (this.unmounted) return;
+            this.cancelVersionCheck(new Error('连接已断开，不能核实保存版本'));
             if (this.props.onConnectionLost) this.props.onConnectionLost();
             const changed = await this.checkDeploymentVersion();
             if (this.unmounted) return;
@@ -112,6 +113,15 @@ class Socket extends React.Component {
 
         websocket.on('state_check_event', async evt => {
             if (!(await this.waitForImport())) return;
+            if (this.versionCheck) {
+                const check = this.versionCheck;
+                this.versionCheck = null;
+                clearTimeout(check.timer);
+                if (!websocket.connected || check.connection !== websocket.id ||
+                    Number(evt.message) !== check.base || this.props.wsMinder.getBase() !== check.base) {
+                    check.reject(new Error('当前连接或版本不一致，保存未完成'));
+                } else check.resolve();
+            }
             if (this.props.isOwnEditPending && this.props.isOwnEditPending()) {
                 this.checkAfterEditAck = true;
                 return;
@@ -247,6 +257,27 @@ class Socket extends React.Component {
         }
     };
 
+    confirmCurrentVersion = base => {
+        if (this.unmounted || this.skipCache || !this.state.ws.connected) {
+            return Promise.reject(new Error('连接不可用，不能核实保存版本'));
+        }
+        if (this.versionCheck) return Promise.reject(new Error('正在核实保存版本，请稍后重试'));
+        return new Promise((resolve, reject) => {
+            const check = { base, connection: this.state.ws.id, resolve, reject };
+            check.timer = setTimeout(() => this.cancelVersionCheck(new Error('核实保存版本超时，请保留输入后重试')), 10000);
+            this.versionCheck = check;
+            this.sendMessage('state_check', { message: '' });
+        });
+    };
+
+    cancelVersionCheck = error => {
+        if (!this.versionCheck) return;
+        const check = this.versionCheck;
+        this.versionCheck = null;
+        clearTimeout(check.timer);
+        check.reject(error);
+    };
+
     checkFreshness = async () => {
         if (this.unmounted || this.skipCache || document.hidden) return;
         if (await this.checkDeploymentVersion()) {
@@ -286,6 +317,7 @@ class Socket extends React.Component {
 
     componentWillUnmount() {
         this.unmounted = true;
+        this.cancelVersionCheck(new Error('编辑器已关闭，不能核实保存版本'));
         cancelMindMapImport(this.props.wsMinder);
         window.removeEventListener('beforeunload', this.leaveListener);
         window.removeEventListener('focus', this.checkFreshness);

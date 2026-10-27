@@ -57,3 +57,16 @@ test('源更新无条件通知，但历史确认不混为普通编辑确认', as
   expect(revisions).toBe(1);
   expect(editAcks).toBe(0);
 });
+
+test('重试前必须收到同一连接的当前版本确认，版本不一致必须拒绝', async () => {
+  const f = makeSocket();
+  f.socket.connected = true;
+  f.socket.emit = () => {};
+  const confirmed = f.component.confirmCurrentVersion(3);
+  await f.callbacks.state_check_event({ message: '3' });
+  await expect(confirmed).resolves.toBeUndefined();
+  const stale = f.component.confirmCurrentVersion(3);
+  const rejected = expect(stale).rejects.toThrow('版本');
+  await f.callbacks.state_check_event({ message: '4' });
+  await rejected;
+});
