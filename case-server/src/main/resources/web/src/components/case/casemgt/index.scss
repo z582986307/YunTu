@@ -141,3 +141,22 @@
         min-height: 0;
     }
 }
+.case-detail-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+    .ant-btn { white-space: nowrap; }
+}
+.case-source-edit-notice,
+.case-source-update-notice {
+    flex: 0 0 auto;
+    padding: 6px 12px;
+    background: #e8f3ff;
+    color: #245bdb;
+    font-size: 12px;
+    .ant-btn { height: 24px; padding: 0 8px; }
+}
+@media (max-width: 800px) {
+    .case-detail-heading { grid-template-columns: 1fr 1fr; gap: 8px; }
+}

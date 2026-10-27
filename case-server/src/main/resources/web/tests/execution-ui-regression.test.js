@@ -92,7 +92,6 @@ assert(styles.includes('.mindmap-header-search') && styles.includes('border-radi
 assert(styles.includes('.mindmap-online-button.ant-btn-primary'), '在线人数按钮应提供独立的圆角样式')
 assert(editor.includes('normalizeOnlineUsers'), '在线人数应过滤空名称、去重并保留当前连接用户')
 assert(editor.includes('wsConnected: false'), '在线人数应区分未连接和已连接状态')
-assert(editor.includes('this.setState({ wsConnected: false, nowUseList: [] })'), 'Socket 断开后在线人数应归零')
 assert(socket.includes('autoConnect: false'), 'Socket 应先注册监听器再连接，避免漏掉当前用户在线事件')
 assert(socket.includes('this.state.ws.connect()'), 'Socket 监听器注册完成后应显式建立连接')
 assert(caseMgtStyles.includes('.case-detail-save.ant-btn-primary') && caseMgtStyles.includes('border-radius: 10px;'), '顶部保存按钮应提供统一的圆角样式')

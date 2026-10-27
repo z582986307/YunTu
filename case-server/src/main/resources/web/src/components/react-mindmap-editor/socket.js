@@ -45,28 +45,28 @@ class Socket extends React.Component {
 
         websocket.on('disconnect', async () => {
             if (this.unmounted) return;
+            if (this.props.onConnectionLost) this.props.onConnectionLost();
             const changed = await this.checkDeploymentVersion();
             if (this.unmounted) return;
             if (changed && typeof this.props.handlePlatformUpdate === 'function') this.props.handlePlatformUpdate();
             else if (typeof this.props.onClose === 'function') this.props.onClose();
-            console.log('disconnect happened.')
-            if (!this.skipCache && !this.isExecutionRecord() && isMindMapReady(this.props.wsMinder)) {
-                localStorage.setItem(JSON.stringify(this.props.wsParam), JSON.stringify(this.props.wsMinder.exportJson()));
+            if (!this.skipCache && !this.isExecutionRecord() && !this.isSourceEditing() && isMindMapReady(this.props.wsMinder)) {
+                try { localStorage.setItem(JSON.stringify(this.props.wsParam), JSON.stringify(this.props.wsMinder.exportJson())); } catch (error) { /* 安全降级 */ }
             }
         });
 
         websocket.on('connect_notify_event', evt => {
-            console.log('connect notify ', evt.message);
             if (typeof this.props.handleWsUserStat === 'function') this.props.handleWsUserStat(evt.message);
         });
 
         websocket.on('open_event', async evt => {
+            if (this.unmounted || this.sourceDenied) return;
             try {
                 const serverData = JSON.parse(evt.message || '{}');
                 if (typeof this.props.handleServerSnapshot === 'function') this.props.handleServerSnapshot(evt.message, serverData.base);
                 let data = normalizeRightMindMap(serverData);
                 const cacheKey = JSON.stringify(this.props.wsParam);
-                if (!this.isExecutionRecord()) {
+                if (!this.isExecutionRecord() && !this.isSourceEditing()) {
                     try {
                         const cached = JSON.parse(localStorage.getItem(cacheKey));
                         if (shouldRecoverCachedContent(data, cached)) data = normalizeRightMindMap(cached);
@@ -75,10 +75,11 @@ class Socket extends React.Component {
                 window.minderData = undefined;
                 this.pendingImport = importMindMapProgressively(this.props.wsMinder, data);
                 const result = await this.pendingImport;
-                if (result.cancelled || this.unmounted) return;
+                if (result.cancelled || this.unmounted || this.sourceDenied) return;
                 window.minderData = data;
                 this.expectedBase = this.props.wsMinder.getBase();
-                localStorage.removeItem(cacheKey);
+                try { localStorage.removeItem(cacheKey); } catch (error) { /* 安全降级 */ }
+                if (typeof this.props.onImported === 'function') await this.props.onImported(data);
             } catch (error) {
                 if (!this.unmounted) message.error('用例加载失败，请重新进入当前页面');
             }
@@ -86,6 +87,19 @@ class Socket extends React.Component {
 
         websocket.on('save_ack_event', evt => {
             if (typeof this.props.handleSaveAck === 'function') this.props.handleSaveAck(evt.message);
+        });
+
+        websocket.on('source_case_updated', evt => {
+            if (!this.unmounted && this.props.onSourceCaseUpdated) this.props.onSourceCaseUpdated(evt.message);
+        });
+        websocket.on('source_edit_denied', () => this.denySourceEditing());
+        websocket.on('source_revision_event', async evt => {
+            if (!(await this.waitForImport())) return;
+            try {
+                if (this.props.handleSourceRevision) this.props.handleSourceRevision(evt.message);
+            } catch (error) {
+                if (this.props.onFailure) this.props.onFailure();
+            }
         });
 
         websocket.on('stale_data_event', () => {
@@ -142,7 +156,6 @@ class Socket extends React.Component {
         });
         websocket.on('undo', async evt => {
             if (!(await this.waitForImport())) return;
-            console.log('undo info', evt.message);
             try {
                 if (typeof this.props.handleUndoAck === 'function') {
                     this.props.handleUndoAck(evt.message);
@@ -153,7 +166,6 @@ class Socket extends React.Component {
         })
         websocket.on('redo', async evt => {
             if (!(await this.waitForImport())) return;
-            console.log('redo info', evt.message);
             try {
                 if (typeof this.props.handleRedoAck === 'function') {
                     this.props.handleRedoAck(evt.message);
@@ -164,26 +176,38 @@ class Socket extends React.Component {
         })
         // message 0:加锁；1：解锁；2:加/解锁成功；3:加/解锁失败
         websocket.on('lock', evt => {
-            console.log('lock info', evt.message);
+            if (this.isSourceEditing() && evt.message === '0') {
+                this.denySourceEditing();
+                return;
+            }
             if (typeof this.props.handleLock === 'function') this.props.handleLock(evt.message);
         });
 
-        websocket.on('connect_error', e => {
-            console.log('connect_error', e);
+        websocket.on('connect_error', () => {
+            if (this.props.onFailure) this.props.onFailure();
             websocket.disconnect();
         });
 
-        websocket.on('warning', e => {
-            message.error('服务端处理变更失败，请刷新页面');
+        websocket.on('warning', () => {
+            if (this.props.onFailure) this.props.onFailure();
+            else message.error('服务端处理变更失败，请刷新页面');
         });
     }
 
+    denySourceEditing = () => {
+        if (this.unmounted || this.sourceDenied) return;
+        this.sourceDenied = true;
+        this.skipCache = true;
+        cancelMindMapImport(this.props.wsMinder);
+        if (this.props.onSourceEditDenied) this.props.onSourceEditDenied();
+    };
+
     waitForImport = async () => {
         const pending = this.pendingImport;
-        if (!pending) return !this.unmounted;
+        if (!pending) return !this.unmounted && !this.sourceDenied;
         try {
             const result = await pending;
-            return !this.unmounted && !result.cancelled && pending === this.pendingImport;
+            return !this.unmounted && !this.sourceDenied && !result.cancelled && pending === this.pendingImport;
         } catch (error) {
             return false;
         }
@@ -242,17 +266,17 @@ class Socket extends React.Component {
         const query = this.props.wsParam && this.props.wsParam.query;
         return Boolean(query && query.recordId && query.recordId !== 'undefined');
     };
+    isSourceEditing = () => Boolean(this.props.wsParam && this.props.wsParam.query && this.props.wsParam.query.sourceTaskId);
 
     leaveListener(e) {
         e.preventDefault();
-        e.returnValue = '内容将被存储到缓存，下次打开相同用例优先从缓存获取！';
-        if (!this.skipCache && !this.isExecutionRecord() && isMindMapReady(this.props.wsMinder) && this.props.wsMinder.getBase() > 16) {
-            localStorage.setItem(JSON.stringify(this.props.wsParam), JSON.stringify(this.props.wsMinder.exportJson()));
+        e.returnValue = '请确认当前内容已保存后再离开页面';
+        if (!this.skipCache && !this.isExecutionRecord() && !this.isSourceEditing() && isMindMapReady(this.props.wsMinder) && this.props.wsMinder.getBase() > 16) {
+            try { localStorage.setItem(JSON.stringify(this.props.wsParam), JSON.stringify(this.props.wsMinder.exportJson())); } catch (error) { /* 安全降级 */ }
         }
     }
 
     componentDidMount() {
-        console.log(' -- componentDidMount -- ')
         this.setupSocket();
         this.state.ws.connect();
         window.addEventListener('beforeunload', this.leaveListener);
@@ -267,8 +291,9 @@ class Socket extends React.Component {
         window.removeEventListener('focus', this.checkFreshness);
         document.removeEventListener('visibilitychange', this.checkFreshness);
 
+        this.state.ws.off();
         this.state.ws.disconnect();
-        console.log(' -- componentWillUnmount -- ');
+        this.pendingImport = null;
     }
 
     render() {

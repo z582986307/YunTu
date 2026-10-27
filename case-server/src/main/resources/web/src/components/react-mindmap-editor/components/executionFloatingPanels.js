@@ -41,10 +41,13 @@ class ExecutionFloatingPanels extends Component {
     executionIndex: createExecutionResultIndex(this.props.minder.getRoot()),
   }
   componentDidMount() {
+    if (this.props.registerPendingInput)
+      this.unregisterPendingInput = this.props.registerPendingInput(this.commitPendingInput)
     this.props.minder.on('import', this.rebuildExecutionIndex)
     this.props.minder.on('progressiveimportdone', this.rebuildExecutionIndex)
   }
   componentWillUnmount() {
+    if (this.unregisterPendingInput) this.unregisterPendingInput()
     this.props.minder.off('import', this.rebuildExecutionIndex)
     this.props.minder.off('progressiveimportdone', this.rebuildExecutionIndex)
     this.props.minder.off('layoutallfinish', this.centerAfterFilter)
@@ -86,7 +89,13 @@ class ExecutionFloatingPanels extends Component {
     minder.fire('receiverfocus')
     this.props.onChange()
   }
-  saveNote = () => {
+  commitPendingInput = () => {
+    const node = this.props.minder.getSelectedNode()
+    if (!node || this.props.isLock || this.props.minder.getSelectedNodes().length !== 1) return
+    if (this.noteComposing) throw new Error('请先完成备注输入法选词，再保存或编辑源用例')
+    if ((this.state.note.trim() || '') !== getNodeNote(node)) this.saveNote(false)
+  }
+  saveNote = (notify = true) => {
     const value = this.state.note.trim() || null
     const node = this.props.minder.getSelectedNode()
     const apply = () => this.props.minder.execCommand('Note', value)
@@ -94,7 +103,7 @@ class ExecutionFloatingPanels extends Component {
       this.props.onExecutionChange('note', [node], value, apply)
     else apply()
     this.props.onChange()
-    message.success('备注已保存')
+    if (notify) message.success('备注已保存')
   }
   centerAfterFilter = () => {
     const { minder } = this.props
@@ -315,6 +324,8 @@ class ExecutionFloatingPanels extends Component {
               placeholder="填写本次执行备注"
               value={this.state.note}
               onChange={event => this.setState({ note: event.target.value })}
+              onCompositionStart={() => { this.noteComposing = true }}
+              onCompositionEnd={() => { this.noteComposing = false }}
             />
             <div className="execution-panel-footer">
               <Button type="primary" disabled={noteDisabled} onClick={this.saveNote}>
@@ -345,5 +356,6 @@ ExecutionFloatingPanels.propTypes = {
   baseUrl: PropTypes.string,
   uploadUrl: PropTypes.string,
   onExecutionChange: PropTypes.func,
+  registerPendingInput: PropTypes.func,
 }
 export default ExecutionFloatingPanels

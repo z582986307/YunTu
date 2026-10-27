@@ -411,7 +411,34 @@
     .ant-switch-inner .anticon {
       color: #475569;
     }
+    &.ant-switch-checked {
+      border-color: #faad14;
+      background-color: #faad14;
+    }
   }
+}
+.mindmap-source-unassigned { opacity: .5; }
+.mindmap-mark-group {
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px;
+  max-width: 100%;
+}
+.mindmap-group-label, .mindmap-tag-hint {
+  color: #86909c;
+  font-size: 12px;
+  line-height: 20px;
+}
+.mindmap-tag-actions { max-width: 360px; padding: 0 4px; }
+.mindmap-tag-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 78px; overflow: auto; }
+.mindmap-tag-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  &:disabled { cursor: not-allowed; opacity: .5; }
+  &:focus-visible { outline: 2px solid #3370ff; outline-offset: 2px; }
 }
 .yuntu-lock-wrap {
   display: inline-flex;

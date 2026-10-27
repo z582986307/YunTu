@@ -17,6 +17,9 @@ test('首个进入者显示持有锁且可编辑，点击后发送解锁请求',
   const handlerBody = editor.match(/handleLock = \(data\) => \{([\s\S]*?)\n  \}/)[1]
   const handleLock = new Function('data', 'message', handlerBody)
   const page = {
+    props: {},
+    minder: { setStatus: jest.fn() },
+    notifyOperationState: () => {},
     state: { locked: false, isLock: false },
     setState(update) { Object.assign(this.state, update) },
   }

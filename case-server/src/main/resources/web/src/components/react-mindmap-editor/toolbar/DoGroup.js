@@ -5,9 +5,8 @@ import './DoGroup.scss';
 
 const MAX_HISTORY = 100;
 
-let doDiffs = [];
-
 class DoGroup extends Component {
+  doDiffs = [];
   state = {
     undoDiffs: [],
     redoDiffs: [],
@@ -21,6 +20,7 @@ class DoGroup extends Component {
   }
   reset = () => {
     if (this.props.minder._progressiveImporting) return;
+    this.doDiffs = [];
     this.setState({
       undoDiffs: [],
       redoDiffs: [],
@@ -29,6 +29,8 @@ class DoGroup extends Component {
   };
 
   componentWillUnmount() {
+    this.unmounted = true;
+    this.doDiffs = [];
     this.props.minder.off('import progressiveimportdone', this.reset);
   }
 
@@ -41,16 +43,15 @@ class DoGroup extends Component {
     const doDiff = jsonDiff.compare(lastSnap, headSnap);
     if (diff.length) {
       if (diff.length === 1 && diff[0].path === '/base') {
-        const undoTop = undoDiffs.pop();
-        undoTop.push(diff[0]);
-        undoDiffs.push(undoTop);
+        const undoTop = undoDiffs[undoDiffs.length - 1];
+        if (undoTop) undoTop.push(diff[0]);
       } else {
         undoDiffs.push(diff);
-        doDiffs.push(doDiff);
+        this.doDiffs.push(doDiff);
       }
       while (undoDiffs.length > MAX_HISTORY) {
         undoDiffs.shift();
-        doDiffs.shift();
+        this.doDiffs.shift();
       }
       lastSnap = headSnap;
       this.setState({ undoDiffs, lastSnap });
@@ -69,14 +70,17 @@ class DoGroup extends Component {
   };
 
   // 撤销
-  undo = (notifyInfo = {}) => {
+  undo = async (notifyInfo = {}) => {
+    if ((this.props.isLock && notifyInfo instanceof Object) || !this.hasUndo()) return;
+    if (this.props.sourceEditing && notifyInfo instanceof Object &&
+        !(await this.props.beginSourceHistory())) return;
+    if (this.unmounted) return;
     this.notifyInfo = notifyInfo;
     this.setState({ patchLock: true }, () => {
-      console.log('notifyInfo', this.notifyInfo);
       const { minder } = this.props;
       let { undoDiffs } = this.state;
       const undoDiff = undoDiffs.pop();
-      doDiffs.pop();
+      this.doDiffs.pop();
       if (undoDiff) {
         if (this.notifyInfo instanceof Object) {
           this.props.wsInstance.sendMessage('undo', {
@@ -93,14 +97,17 @@ class DoGroup extends Component {
     });
   };
   // 重做
-  redo = (notifyInfo = {}) => {
+  redo = async (notifyInfo = {}) => {
+    if ((this.props.isLock && notifyInfo instanceof Object) || !this.hasRedo()) return;
+    if (this.props.sourceEditing && notifyInfo instanceof Object &&
+        !(await this.props.beginSourceHistory())) return;
+    if (this.unmounted) return;
     this.notifyInfo = notifyInfo;
     this.setState({ patchLock: true }, () => {
       const { minder } = this.props;
       let { redoDiffs } = this.state;
       const redoDiff = redoDiffs.pop();
 
-      console.log('pop redoDiffs ?', redoDiffs.length);
       if (redoDiff) {
         if (this.notifyInfo instanceof Object) {
           this.props.wsInstance.sendMessage('redo', {
@@ -111,14 +118,14 @@ class DoGroup extends Component {
           minder.applyPatches(JSON.parse(notifyInfo || '{}'));
         }
         this.makeUndoDiff();
-        doDiffs.pop();
+        this.doDiffs.pop();
       }
       this.setState({ patchLock: false });
     });
   };
   getAndResetPatch = () => {
-    const diffs = [...doDiffs];
-    doDiffs = [];
+    const diffs = [...this.doDiffs];
+    this.doDiffs = [];
     return diffs;
   };
   changed = () => {
@@ -141,10 +148,10 @@ class DoGroup extends Component {
     const { undoDiffs, lastSnap } = this.state;
     jsonDiff.applyPatch(lastSnap, forwardPatches, false, true);
     undoDiffs.push(inversePatches);
-    doDiffs.push(forwardPatches);
+    this.doDiffs.push(forwardPatches);
     while (undoDiffs.length > MAX_HISTORY) {
       undoDiffs.shift();
-      doDiffs.shift();
+      this.doDiffs.shift();
     }
     this.setState({ undoDiffs, redoDiffs: [], lastSnap });
     this.getAndResetPatch();
@@ -153,9 +160,12 @@ class DoGroup extends Component {
     const { undoDiffs } = this.state;
     return !!undoDiffs.length;
   };
+  syncBase = base => {
+    this.state.lastSnap.base = base;
+    this.setState({ lastSnap: this.state.lastSnap });
+  };
   hasRedo = () => {
     const { redoDiffs } = this.state;
-    console.log('has redoDiffs ?', redoDiffs.length);
     return !!redoDiffs.length;
   };
 

@@ -10,14 +10,26 @@ const NoteDrawer = (props) => {
   // const [percent, setPercent] = useState(0);
 
   const debouncedUpdate = useCallback(
-    debounce((newValue) => minder.execCommand('Note', newValue), 500),
+    debounce((newValue, node) => {
+      if (!node || (props.isEditorActive && !props.isEditorActive())) return;
+      node.setData('note', newValue);
+      node.render();
+      minder.fire('contentchange');
+    }, 500),
     []
   );
 
   const handleChange = (newValue) => {
     setValue(newValue);
-    debouncedUpdate(newValue);
+    debouncedUpdate(newValue, minder.getSelectedNode());
   };
+  useEffect(() => {
+    const unregister = props.registerPendingInput && props.registerPendingInput(() => debouncedUpdate.flush());
+    return () => {
+      debouncedUpdate.cancel();
+      if (unregister) unregister();
+    };
+  }, [debouncedUpdate, props.registerPendingInput]);
 
   // const handleUpload = (e) => {
   //   const { status, response } = e.file;
@@ -56,7 +68,7 @@ const NoteDrawer = (props) => {
       title={<span>备注（支持 Markdown 语法）</span>}
       placement="right"
       width={360}
-      onClose={onCancel}
+      onClose={() => { debouncedUpdate.flush(); onCancel(); }}
       visible={visible}
       mask={false}
       getContainer={() => minder.getPaper().container.parentNode}

@@ -32,8 +32,83 @@ export default class CaseMgt extends React.Component {
       recordDetail: null,
       casedetail: null,
       requirementObj: [],
+      sourceEditing: false,
+      switchingMode: false,
+      editorReady: false,
+      sourceUpdated: false,
+      editorEpoch: 0,
     };
   }
+  componentWillUnmount() {
+    this.unmounted = true;
+  }
+
+  enterSourceEditing = async () => {
+    if (this.modeTransition || !this.editorNode || !this.editorNode.canOperate()) return;
+    this.modeTransition = true;
+    this.setState({ switchingMode: true });
+    try {
+      const editor = this.editorNode;
+      await editor.saveAndWait();
+      if (this.unmounted) return;
+      this.taskViewState = editor.captureViewState();
+      this.assignedNodeIds = editor.getAssignedNodeIds();
+      this.setState(state => ({ sourceEditing: true, editorReady: false, editorEpoch: state.editorEpoch + 1 }));
+    } catch (error) {
+      message.error(error.message || '保存未完成，暂不能编辑源用例');
+    } finally {
+      this.modeTransition = false;
+      if (!this.unmounted) this.setState({ switchingMode: false });
+    }
+  };
+
+  finishSourceEditing = async () => {
+    if (this.modeTransition || !this.editorNode) return;
+    this.modeTransition = true;
+    this.setState({ switchingMode: true });
+    try {
+      await this.editorNode.saveAndWait();
+      if (this.unmounted) return;
+      // 新任务实例重新连接，后端将最新源内容与已保存执行数据合并；不复用旧脑图。
+      this.setState(state => ({ sourceEditing: false, sourceUpdated: false,
+        editorReady: false, editorEpoch: state.editorEpoch + 1 }));
+      this.getContentById();
+    } catch (error) {
+      message.error(error.message || '保存未完成，请留在编辑状态重试');
+    } finally {
+      this.modeTransition = false;
+      if (!this.unmounted) this.setState({ switchingMode: false });
+    }
+  };
+
+  handleSourceEditDenied = () => {
+    if (!this.state.sourceEditing || this.unmounted) return;
+    this.setState(state => ({ sourceEditing: false, editorReady: false,
+      editorEpoch: state.editorEpoch + 1 }));
+    message.warning('源用例被占用或无法编辑，已返回原任务位置');
+  };
+
+  handleSourceCaseUpdated = () => {
+    if (!this.unmounted && !this.state.sourceEditing) this.setState({ sourceUpdated: true });
+  };
+
+  refreshTask = async () => {
+    if (this.modeTransition || !this.editorNode) return;
+    this.modeTransition = true;
+    this.setState({ switchingMode: true });
+    try {
+      await this.editorNode.saveAndWait();
+      if (this.unmounted) return;
+      this.taskViewState = this.editorNode.captureViewState();
+      this.setState(state => ({ sourceUpdated: false, editorReady: false, editorEpoch: state.editorEpoch + 1 }));
+      this.getContentById();
+    } catch (error) {
+      message.error(error.message || '保存未完成，暂不能刷新');
+    } finally {
+      this.modeTransition = false;
+      if (!this.unmounted) this.setState({ switchingMode: false });
+    }
+  };
   componentDidMount() {
     const { iscore } = this.props.match.params;
     if (iscore === '3') {
@@ -84,7 +159,7 @@ export default class CaseMgt extends React.Component {
       params: { id: this.props.match.params.itemid },
     }).then(res => {
       if (res.code == 200) {
-        this.setState({ recordDetail: res.data });
+        if (!this.unmounted) this.setState({ recordDetail: res.data });
       } else {
         message.error(res.msg);
       }
@@ -114,7 +189,7 @@ export default class CaseMgt extends React.Component {
     const { match } = this.props;
     const { iscore, caseId, itemid } = match.params;
     const user = getCookies('username');
-    const { recordDetail, casedetail } = this.state;
+    const { recordDetail, casedetail, sourceEditing, switchingMode, editorEpoch, editorReady } = this.state;
     let readOnly = false;
     let progressShow = false;
     let addFactor = false;
@@ -126,6 +201,11 @@ export default class CaseMgt extends React.Component {
       readOnly = true;
       progressShow = true;
       addFactor = false;
+    }
+    if (sourceEditing) {
+      readOnly = false;
+      progressShow = false;
+      addFactor = true;
     }
     const planCycle = recordDetail
       ? `${recordDetail.expectStartTime
@@ -158,16 +238,31 @@ export default class CaseMgt extends React.Component {
               (casedetail && casedetail.requirementId) ||
               '未关联'}
           </span>
+          <div className="case-detail-actions">
+          {Number(iscore) === 3 && <Button
+            loading={switchingMode}
+            disabled={!editorReady || switchingMode}
+            onClick={sourceEditing ? this.finishSourceEditing : this.enterSourceEditing}
+          >{sourceEditing ? '结束编辑' : '编辑用例'}</Button>}
           {Number(iscore) !== 2 && (
             <Button
               type="primary"
               className="case-detail-save"
+              disabled={switchingMode}
               onClick={() => this.editorNode && this.editorNode.onButtonSave()}
             >
               保存
             </Button>
           )}
+          </div>
         </div>
+        {sourceEditing && <div className="case-source-edit-notice" role="status">
+          正在编辑完整源用例；淡化节点未分配到当前任务。结束编辑并保存后返回原执行位置。
+        </div>}
+        {!sourceEditing && this.state.sourceUpdated && <div className="case-source-update-notice" role="status">
+          源用例已更新，刷新后查看
+          <Button type="link" loading={switchingMode} onClick={this.refreshTask}>刷新</Button>
+        </div>}
         <div className="case-detail-content">
           {(recordDetail && (
             <Row>
@@ -195,7 +290,15 @@ export default class CaseMgt extends React.Component {
             null}
            
           <YunTuEditor
+            key={`${sourceEditing ? 'source' : 'task'}-${editorEpoch}`}
             ref={editorNode => (this.editorNode = editorNode)}
+            sourceEditing={sourceEditing}
+            assignedNodeIds={this.assignedNodeIds}
+            initialViewState={this.taskViewState}
+            viewStateKey={`mindmap-view:${caseId}:${itemid || 'case'}:${sourceEditing ? 'source' : (Number(iscore) === 3 ? 'task' : 'case')}`}
+            onOperationStateChanged={ready => !this.unmounted && this.setState({ editorReady: ready })}
+            onSourceCaseUpdated={this.handleSourceCaseUpdated}
+            onSourceEditDenied={this.handleSourceEditDenied}
             tags={['前置条件', '执行步骤', '预期结果']}
             iscore={iscore}
             progressShow={progressShow}
@@ -212,7 +315,9 @@ export default class CaseMgt extends React.Component {
             baseUrl=""
             uploadUrl="/api/file/uploadAttachment"
             wsUrl={getSocketUrl(window.location)}
-            wsParam = {{ transports:['websocket','xhr-polling','jsonp-polling'], query: { caseId: caseId, recordId: itemid, user: user }}}
+            wsParam = {{ transports:['websocket','xhr-polling','jsonp-polling'], query: { caseId: caseId,
+              recordId: sourceEditing ? 'undefined' : itemid, user: user,
+              ...(sourceEditing ? { sourceTaskId: itemid } : {}) }}}
             // wsUrl={`ws://localhost:8094/api/case/${caseId}/${itemid}/${iscore}/${user}`}
           />
         </div>

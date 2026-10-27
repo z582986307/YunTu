@@ -1279,6 +1279,11 @@
         this._initEvents();
       });
       kity.extendClass(Minder, {
+        _listenGlobal: function (target, type, handler) {
+          target.addEventListener(type, handler);
+          this._globalDisposers = this._globalDisposers || [];
+          this._globalDisposers.push(function () { target.removeEventListener(type, handler); });
+        },
         _initEvents: function () {
           this._eventCallbacks = {};
         },
@@ -1287,13 +1292,15 @@
           this._bindEvents();
         },
         _bindEvents: function () {
+          if (!this._firePharseHandler) this._firePharseHandler = this._firePharse.bind(this);
           /* jscs:disable maximumLineLength */
           this._paper.on(
             'click dblclick mousedown contextmenu mouseup mousemove mouseover mousewheel DOMMouseScroll touchstart touchmove touchend dragenter dragleave drop',
-            this._firePharse.bind(this)
+            this._firePharseHandler
           );
           if (window) {
-            window.addEventListener('resize', this._firePharse.bind(this));
+            window.removeEventListener('resize', this._firePharseHandler);
+            window.addEventListener('resize', this._firePharseHandler);
           }
         },
         /**
@@ -2225,9 +2232,18 @@
           }
         },
         destroy: function () {
+          if (this._destroyed) return;
+          this._destroyed = true;
           if (this._paintGroups) this._paintGroups.dispose();
           var modules = this._modules;
-          this._resetEvents();
+          window.removeEventListener('resize', this._firePharseHandler);
+          this._paper.off('click dblclick mousedown contextmenu mouseup mousemove mouseover mousewheel DOMMouseScroll touchstart touchmove touchend dragenter dragleave drop', this._firePharseHandler);
+          (this._globalDisposers || []).forEach(function (dispose) { dispose(); });
+          this._globalDisposers = [];
+          (this._imageLoadCancels || []).slice().forEach(function (cancel) { cancel(); });
+          if (this._viewDragger && this._viewDragger.timeline()) this._viewDragger.timeline().stop();
+          if (this.viewer) this.viewer.dispose();
+          this._initEvents();
           this._garbage();
           for (var key in modules) {
             if (!modules[key].destroy) continue;
@@ -5375,7 +5391,7 @@
         return {
           init: function () {
             dragger = new TreeDragger(this);
-            window.addEventListener('mouseup', function () {
+            this._listenGlobal(window, 'mouseup', function () {
               dragger.dragEnd();
             });
           },
@@ -6192,6 +6208,7 @@
             callback(null);
           };
           img.src = url;
+          return img;
         }
         function fitImageSize(width, height, maxWidth, maxHeight) {
           var ratio = width / height,
@@ -6235,7 +6252,17 @@
               km.fire('contentchange');
               return;
             }
-            loadImageSize(url, function (width, height) {
+            return new Promise(function (resolve, reject) {
+              var cancel;
+              var cleanup = function () {
+                if (km._imageLoadCancels) km._imageLoadCancels = km._imageLoadCancels.filter(function (item) { return item !== cancel; });
+              };
+              var image = loadImageSize(url, function (width, height) {
+              cleanup();
+              if (km._destroyed || !width || !height) {
+                reject(new Error(km._destroyed ? '编辑器已关闭，图片未插入' : '图片无法加载，请重试'));
+                return;
+              }
               nodes.forEach(function (n) {
                 var size = fitImageSize(
                   width,
@@ -6251,9 +6278,16 @@
               km.fire('saveScene');
               km.layout(300);
 
-              setTimeout(() => {
-                km.fire('contentchange');
-              }, 300);
+              km.fire('contentchange');
+              resolve();
+              });
+              cancel = function () {
+                if (image) { image.onload = image.onerror = null; image.src = ''; }
+                cleanup();
+                reject(new Error('编辑器已关闭，图片未插入'));
+              };
+              km._imageLoadCancels = km._imageLoadCancels || [];
+              km._imageLoadCancels.push(cancel);
             });
           },
           queryState: function (km) {
@@ -7708,7 +7742,7 @@
           lastDownPosition = null;
         return {
           init: function () {
-            window.addEventListener('mouseup', function () {
+            this._listenGlobal(window, 'mouseup', function () {
               marqueeActivator.selectEnd();
             });
           },
@@ -8332,7 +8366,7 @@
               }
             })
             .on('mouseup touchend', dragEnd);
-          window.addEventListener('mouseup', dragEnd);
+          this._minder._listenGlobal(window, 'mouseup', dragEnd);
           this._minder.on('contextmenu', function (e) {
             e.preventDefault();
           });

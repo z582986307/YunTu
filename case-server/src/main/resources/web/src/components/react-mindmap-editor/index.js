@@ -34,6 +34,12 @@ import { buildSaveContent } from './util/saveContent';
 import ThemeGroup from './outlook/ThemeGroup';
 import TemplateGroup from './outlook/TemplateGroup';
 import FontGroup from './outlook/FontGroup';
+import PriorityGroup from './toolbar/PriorityGroup';
+import TagGroup from './toolbar/TagGroup';
+import MediaGroup from './toolbar/MediaGroup';
+import SaveBarrier from './util/saveBarrier';
+import { captureViewState, restoreViewState, readViewState, writeViewState } from './util/viewState';
+import { runInSlices } from './progressiveRender';
 import MindMapSearch from './components/mindMapSearch';
 import { expandToList, initData, buttons } from './constants';
 import { NavBar } from './components';
@@ -91,7 +97,7 @@ class KityminderEditor extends Component {
       showToolBar: false,
       fullScreen: false,
       loading: true,
-      isLock: this.props.isLock || false, // 被其他人锁住
+      isLock: this.props.sourceEditing || this.props.isLock || false, // 源模式授权前不可写
       locked: false, // 当前session主动锁住
       popoverVisible: false,
       nowUseList: [],
@@ -104,24 +110,26 @@ class KityminderEditor extends Component {
     };
     this.base = -1;
     this.expectedBase = -1;
-    setTimeout(() => {
-      if (this.minder) {
-        this.setState({
-          minder: this.minder,
-        });
-        clipboardRuntime.init(this.minder, this.props.readOnly, this.handlePasteImage);
-      }
-    }, 100);
+    this.saveBarrier = new SaveBarrier();
+    this.pendingInputs = new Set();
     this.navNode = createRef();
   }
   componentDidMount() {
     document.addEventListener('mousedown', this.handleContextDismiss);
     document.addEventListener('mousedown', this.handlePendingCompositionPointerDown, true);
-    this.initKeyBoardEvent();
     this.initData = initData;
+    this.setState({ minder: this.minder });
+    window.addEventListener('beforeunload', this.persistViewState);
   }
   componentWillUnmount() {
+    this.persistViewState();
+    this.unmounted = true;
+    this.saveBarrier.fail(new Error('编辑器已关闭，保存未完成'));
+    this.pendingInputs.clear();
     clearTimeout(this.autoSaveTimer);
+    clearTimeout(this.viewStateTimer);
+    clearTimeout(this.previewTimer);
+    if (this.assignedStyleTask) this.assignedStyleTask.cancelled = true;
     if (this.minder) this.minder.off('layoutapply layoutallfinish', this.followEditLayout);
     this.restoreEditingNodeLayer();
     window.removeEventListener('mousemove', this.handleImageResizeMove);
@@ -134,6 +142,15 @@ class KityminderEditor extends Component {
     clipboardRuntime.removeListener();
     document.removeEventListener('mousedown', this.handleContextDismiss);
     document.removeEventListener('mousedown', this.handlePendingCompositionPointerDown, true);
+    window.removeEventListener('beforeunload', this.persistViewState);
+    if (this.modal) this.modal.destroy();
+    if (this.hotbox && this.hotbox.dispose) this.hotbox.dispose();
+    if (this.minder && this.minder.viewer) this.minder.viewer.dispose();
+    if (this.minder) {
+      if (this.minder._layoutTask) this.minder._layoutTask.cancelled = true;
+      this.minder.destroy();
+    }
+    if (window.ws === this.ws) window.ws = undefined;
     // this.heartCheck.reset();
   }
   handleContextDismiss = event => {
@@ -153,17 +170,96 @@ class KityminderEditor extends Component {
     return importMindMapProgressively(
       this.minder,
       normalizeRightMindMap(data),
-    ).then(result => {
-      if (!result.cancelled) this.minder.fire('contentchange');
+    ).then(async result => {
+      if (!result.cancelled && !this.unmounted) {
+        await this.handleImported();
+        this.minder.fire('contentchange');
+      }
     });
   };
-  // 键盘事件的监听
-  initKeyBoardEvent = () => {
-    document.addEventListener('keydown', this.handleKeyDown);
+  canOperate = () => Boolean(this.minder && !this.unmounted && !this.pageBlocked &&
+    !this.state.loading && !this.state.isLock && this.state.wsConnected &&
+    (!this.props.sourceEditing || this.state.locked));
+  canEditContent = () => this.canOperate() && !this.props.readOnly && !this.historyPending &&
+    !this.saveBarrier.awaitingAck;
+  notifyOperationState = () => {
+    this.syncInputOwnership();
+    if (this.props.onOperationStateChanged) this.props.onOperationStateChanged(this.canOperate());
+  };
+  syncInputOwnership = () => {
+    document.removeEventListener('keydown', this.handleKeyDown);
+    if (this.canOperate()) document.addEventListener('keydown', this.handleKeyDown);
+    const ownsClipboard = this.canEditContent();
+    if (ownsClipboard === this.ownsClipboard) return;
+    clipboardRuntime.removeListener();
+    this.ownsClipboard = ownsClipboard;
+    if (ownsClipboard) clipboardRuntime.init(this.minder, false, this.handlePasteImage);
+  };
+  captureViewState = () => captureViewState(this.minder, this.centerNode);
+  getAssignedNodeIds = () => this.minder.getAllNode().map(node => node.getData('id'));
+  persistViewState = () => {
+    if (!this.viewReady || this.restoringView || !this.props.viewStateKey || !this.minder) return;
+    try { writeViewState(sessionStorage, this.props.viewStateKey, this.captureViewState()); } catch (error) { /* 安全降级 */ }
+  };
+  scheduleViewState = () => {
+    if (!this.viewReady || this.restoringView) return;
+    clearTimeout(this.viewStateTimer);
+    this.viewStateTimer = setTimeout(this.persistViewState, 150);
+  };
+  handleImported = async () => {
+    if (this.unmounted) return;
+    this.restoringView = true;
+    let view = this.props.initialViewState;
+    try { if (!view && this.props.viewStateKey) view = readViewState(sessionStorage, this.props.viewStateKey); } catch (error) { /* 安全降级 */ }
+    try {
+      await restoreViewState(this.minder, this.centerNode, view, () => this.unmounted);
+      if (this.unmounted) return;
+      this.expectedBase = this.minder.getBase();
+      this.restoringView = false;
+      this.viewReady = true;
+      this.setState({ loading: false }, this.notifyOperationState);
+      this.decorateAssignedNodes();
+    } catch (error) {
+      if (!this.unmounted) {
+        this.restoringView = false;
+        this.viewReady = true;
+        this.setState({ loading: false }, this.notifyOperationState);
+      }
+    }
+  };
+  decorateAssignedNodes = () => {
+    if (!this.props.sourceEditing || this.unmounted) return;
+    if (this.assignedStyleTask) this.assignedStyleTask.cancelled = true;
+    const task = { cancelled: false };
+    this.assignedStyleTask = task;
+    const nodes = [this.minder.getRoot()];
+    runInSlices(nodes, node => {
+      nodes.push(...node.getChildren());
+      this.decorateAssignedNode(node);
+    }, task);
+  };
+  decorateAssignedNode = node => {
+    if (!this.props.sourceEditing || this.unmounted || !node || !node.rc) return;
+    if (!this.assignedIds) this.assignedIds = new Set(this.props.assignedNodeIds || []);
+    const element = node.rc.node;
+    const unassigned = !this.assignedIds.has(node.getData('id'));
+    element.classList.toggle('mindmap-source-unassigned', unassigned);
+    if (unassigned) element.setAttribute('aria-label', '未分配到当前任务的源节点');
+    else element.removeAttribute('aria-label');
+  };
+  registerPendingInput = commit => {
+    this.pendingInputs.add(commit);
+    return () => this.pendingInputs.delete(commit);
   };
   initOnEvent = minder => {
     const { readOnly } = this.props;
     minder.setOption('externalImageViewerHandling', true);
+    minder.on('beforeExecCommand', event => {
+      if (this.props.sourceEditing && !this.canEditContent() &&
+          !['zoom', 'zoomin', 'zoomout', 'camera', 'hand', 'expand', 'expandtolevel'].includes(event.commandName)) {
+        event.stopPropagationImmediately();
+      }
+    });
     minder.on('progressiveimportstart', () => this.setState({ loading: true }));
     minder.on('import', () => {
       if (!minder._progressiveImporting) this.centerImportedMap();
@@ -173,6 +269,7 @@ class KityminderEditor extends Component {
     minder.on('layouterror', () => message.error('脑图布局更新失败，请重新进入当前页面'));
     // 视图选中节点变更事件
     minder.on('selectionchange', () => {
+      this.scheduleViewState();
       const node = minder.getSelectedNode();
       if (!readOnly) {
         const { selectedNode, showEdit } = this.state;
@@ -260,6 +357,7 @@ class KityminderEditor extends Component {
 
     // 视图改变事件的监听，用于持续渲染编辑框的位置
     minder.on('viewchange', e => {
+      this.scheduleViewState();
       const { showEdit, noteContent } = this.state;
       const node = minder.getSelectedNode();
       if (showEdit) {
@@ -273,15 +371,15 @@ class KityminderEditor extends Component {
     });
 
     // 备注是否展示的事件监听
-    let previewTimer = null;
     minder.on('shownoterequest', e => {
-      previewTimer = setTimeout(() => this.handleNotePreview(e), 200);
+      this.previewTimer = setTimeout(() => !this.unmounted && this.handleNotePreview(e), 200);
     });
     minder.on('hidenoterequest', () => {
-      clearTimeout(previewTimer);
+      clearTimeout(this.previewTimer);
     });
 
     minder.on('contentchange', this.sendPatch);
+    minder.on('noderender', event => this.decorateAssignedNode(event.node));
     if (!readOnly) minder.on('mousemove', this.handleImageHover);
   };
   centerImportedMap = () => {
@@ -291,14 +389,17 @@ class KityminderEditor extends Component {
     minder.setOption('viewAnimationDuration', 0);
     minder.execCommand('camera', minder.getRoot());
     minder.setOption('viewAnimationDuration', duration);
-    this.setState({ loading: false });
+    // Socket 的导入完成回调统一恢复位置并解除加载态，避免临时中心覆盖会话记录。
+    if (this.props.type === 'compare') this.setState({ loading: false });
   };
   handlePasteImage = (file, node) => {
-    if (this.state.isLock) return;
+    if (!this.canEditContent()) return;
     if (!this.minder || !node) return;
-    pasteImageIntoNode(file, node, this.minder, this.props.baseUrl, this.props.uploadUrl)
+    this.trackImageWork(pasteImageIntoNode(file, node, this.minder, this.props.baseUrl, this.props.uploadUrl,
+      () => !this.unmounted && this.canEditContent()))
       .catch(error => message.error(error.message || '图片粘贴失败，请重试'));
   };
+  trackImageWork = promise => this.saveBarrier.track(promise);
   getImageEventTarget = event => {
     const node = event.getTargetNode && event.getTargetNode();
     const shape = event.kityEvent && event.kityEvent.targetShape;
@@ -332,7 +433,7 @@ class KityminderEditor extends Component {
       width: rect.width, height: rect.height };
   };
   selectNodeImage = node => {
-    if (this.props.readOnly || this.state.isLock) return;
+    if (!this.canEditContent()) return;
     this.minder.select(node, true);
     this.setState({ selectedImage: { node } });
   };
@@ -340,7 +441,7 @@ class KityminderEditor extends Component {
     event.preventDefault();
     event.stopPropagation();
     const selected = this.state.selectedImage;
-    if (!selected || this.props.readOnly || this.state.isLock) return;
+    if (!selected || !this.canEditContent()) return;
     const rect = this.getSelectedImageRect();
     const size = selected.node.getData('imageSize');
     if (!rect || !size) return;
@@ -362,7 +463,7 @@ class KityminderEditor extends Component {
     const start = this.imageResizeStart;
     this.imageResizeStart = null;
     this.setState({ imageResizePreview: null });
-    if (!start || this.props.readOnly) return;
+    if (!start || !this.canEditContent()) return;
     const scale = start.rect.width / start.size.width;
     const width = Math.round(Math.max(30, Math.min(800, start.size.width + (event.clientX - start.x) / scale)));
     if (width === start.size.width) return;
@@ -396,7 +497,7 @@ class KityminderEditor extends Component {
     event.preventDefault();
     event.stopPropagation();
     const hoverImage = this.state.hoverImage;
-    if (!hoverImage || this.state.isLock) return;
+    if (!hoverImage || !this.canEditContent()) return;
     this.setState({ hoverImage: null });
     this.minder.select(hoverImage.node, true);
     this.minder.execCommand('image', null);
@@ -477,12 +578,9 @@ class KityminderEditor extends Component {
     this.hotbox = hotbox;
   };
   handleUndoAck = (data) => {
-    
-    console.log('undo ack get', data)
     this.groupNode.undo(data)
   }
   handleRedoAck = (data) => { 
-    console.log('redo ack get', data)
     this.groupNode.redo(data)
     
   }
@@ -498,7 +596,7 @@ class KityminderEditor extends Component {
   //   this.setState({ undoCnt: undoCnt + 1, redoCnt: redoCnt - 1 });
   // };
   handleKeyDown = event => {
-    if (this.pageBlocked) return;
+    if (this.pageBlocked || this.historyPending || this.saveBarrier.awaitingAck || this.state.isLock) return;
     const e = event;
     const ctrlKey = e.metaKey || e.ctrlKey;
     const hasModal =
@@ -628,7 +726,7 @@ class KityminderEditor extends Component {
     }
   };
   sendPatch = e => {
-    if (this.pageBlocked) return;
+    if (this.pageBlocked || this.unmounted || this.restoringView) return;
     if (this.minder._progressiveImporting || this.minder._mindMapImportFailed) return;
     if (this.skipNextContentChange) {
       this.skipNextContentChange = false;
@@ -708,6 +806,7 @@ class KityminderEditor extends Component {
   };
 
   handleShowInput = (replacementText, showWhileTyping = false, preserveExistingInput = false) => {
+    if (!this.canEditContent()) return;
     const { minder, inputNode } = this;
     if (minder.getSelectedNode() && minder.getStatus() !== 'readonly') {
       const node = minder.getSelectedNode();
@@ -753,7 +852,12 @@ class KityminderEditor extends Component {
     }
   };
   handleWsClose = e => {
-    this.setState({ wsConnected: false, nowUseList: [] });
+    this.saveBarrier.fail(new Error('连接已断开，保存未完成，请保留当前编辑内容'));
+    this.setState({ wsConnected: false, nowUseList: [] }, this.notifyOperationState);
+    if (this.props.sourceEditing) {
+      message.error('连接已断开，源用例尚未确认保存，请保留编辑内容');
+      return;
+    }
     if (this.pageBlocked) return;
     // if (this.props.onClose) {
     //   this.props.onClose(this.minder.exportJson());
@@ -885,37 +989,40 @@ class KityminderEditor extends Component {
     this.setState(state => ({
       wsConnected: true,
       nowUseList: state.nowUseList.length ? state.nowUseList : normalizeOnlineUsers('', currentUser),
-    }));
+    }), this.notifyOperationState);
     // this.heartCheck.reset().start(this.ws);
-    console.log("handle ws open", window.ws);
   };
   handleLock = (data) => {
+    if (this.unmounted) return;
+    if (this.props.onLockStateReceived) this.props.onLockStateReceived(data);
+    if (this.props.sourceEditing && data === '0') {
+      this.handleSourceEditDenied();
+      return;
+    }
     switch (data) {
       case '0':
           this.minder.setStatus('readonly');
-          this.setState({ isLock: true }, () => {
-              document.removeEventListener('keydown', this.handleKeyDown);
-          });
+          this.setState({ isLock: true }, this.notifyOperationState);
           message.warning(this.props.progressShow ? '当前任务已锁定，不可执行' : '当前用例已锁定，不可编辑');
           break;
 
       case '1':
           this.minder.setStatus('normal', true);
           this.setState({ isLock: false, locked: false }, () => {
-              this.initOnEvent(this.minder);
-              document.addEventListener('keydown', this.handleKeyDown);
+              this.notifyOperationState();
           });
           message.success(this.props.progressShow ? '已解锁，可执行' : '已解锁，可编辑');
         break;
 
       case '2':
           message.success(this.pendingLockState ? '锁定成功' : '解锁成功');
-          this.setState({ locked: Boolean(this.pendingLockState) });
+          this.setState({ locked: Boolean(this.pendingLockState) }, this.notifyOperationState);
           this.pendingLockState = undefined;
         break;
 
       case '4':
-          this.setState({ locked: true, isLock: false });
+          this.minder.setStatus('normal', true);
+          this.setState({ locked: true, isLock: false }, this.notifyOperationState);
         break;
 
       case '3':
@@ -934,7 +1041,7 @@ class KityminderEditor extends Component {
   }
 
   handleLockToggle = checked => {
-    if (this.pageBlocked) return;
+    if (this.pageBlocked || this.props.sourceEditing) return;
     if (!this.ws || typeof this.ws.sendMessage !== 'function') {
       message.error('锁定服务未连接，请稍后重试');
       return;
@@ -943,7 +1050,7 @@ class KityminderEditor extends Component {
     this.ws.sendMessage('lock', { message: checked ? 'lock' : 'unlock' });
   };
   prepareNodeInput = () => {
-    if (this.props.readOnly || this.state.showEdit || !this.state.selectedNode || !this.inputNode ||
+    if (!this.canEditContent() || this.state.showEdit || !this.state.selectedNode || !this.inputNode ||
         document.getElementsByClassName('yuntu-modal').length) return;
     const input = this.inputNode.querySelector('textarea');
     if (!input) return;
@@ -968,6 +1075,7 @@ class KityminderEditor extends Component {
     layer.parent.insertBefore(layer.element, next);
   };
   handleEditInput = event => {
+    if (!this.canEditContent()) return;
     const node = this.state.selectedNode;
     if (!node) return;
     if (!this.state.showEdit) {
@@ -979,7 +1087,7 @@ class KityminderEditor extends Component {
     editInput(node, this.inputNode);
   };
   handleExecutionChange = (field, nodes, value, apply) => {
-    if (this.pageBlocked) return;
+    if (!this.canOperate() || this.historyPending || this.saveBarrier.awaitingAck) return;
     const patches = buildNodeDataPatches(nodes.filter(Boolean), field, value);
     if (!patches.length) return;
     const inversePatches = invertNodeDataPatches(patches);
@@ -1102,12 +1210,12 @@ class KityminderEditor extends Component {
         const result = await importMindMapProgressively(this.minder, dataJson);
         if (result.cancelled) return;
         window.minderData = dataJson;
+        await this.handleImported();
 
         // 第一次打开用例，预期base与用例的base保持一直
         this.expectedBase = this.minder.getBase();
       }
     } catch (e) {
-      console.error(e);
       alert('连接异常，请刷新重试');
     }
   };
@@ -1130,36 +1238,135 @@ class KityminderEditor extends Component {
     if (!this.ws || !this.minder || (this.props.readOnly && !(manual && this.props.progressShow))) return;
     if (manual && !this.props.readOnly) this.minder.fire('contentchange');
     clearTimeout(this.autoSaveTimer);
-    if (this.expectedBase > this.minder.getBase()) {
+    if (this.saveInFlight || this.historyPending || (this.pendingEditCount || 0) > 0 ||
+        this.expectedBase > this.minder.getBase()) {
       this.queuedSaveManual = Boolean(manual || this.queuedSaveManual);
       return;
     }
     if (manual) this.manualSavePending = true;
+    // 既有 autosave 成功不发 save_ack；只有手动 save 可登记确认等待。
+    this.saveInFlight = Boolean(manual);
     this.ws.sendMessage(manual ? 'save' : 'autosave', { caseContent: buildSaveContent(this.minder, window.minderData,
       this.props.readOnly ? null : this.rawServerData, this.hasLocalEdits), patch: '', caseVersion: '' });
   };
 
   handleEditAck = () => {
     this.pendingEditCount = Math.max(0, (this.pendingEditCount || 0) - 1);
-    if (this.queuedSaveManual !== undefined && this.expectedBase <= this.minder.getBase()) {
+    this.saveBarrier.notify();
+    this.flushQueuedSave();
+  };
+
+  flushQueuedSave = () => {
+    if (!this.saveBarrier.pending && !this.saveInFlight && !this.historyPending &&
+        !(this.pendingEditCount || 0) && this.queuedSaveManual !== undefined &&
+        this.expectedBase <= this.minder.getBase()) {
       const manual = this.queuedSaveManual;
       this.queuedSaveManual = undefined;
       this.saveCurrentCase(manual);
     }
   };
 
-  onButtonSave = () => this.saveCurrentCase(true);
+  commitCurrentInput = () => {
+    if (!this.state.showEdit) return;
+    const input = this.inputNode && this.inputNode.querySelector('textarea');
+    const value = input ? input.value : this.state.inputContent;
+    if (this.composing || this.discardPendingComposition ||
+        (this.lastCompositionText === value && !this.imeConfirmedByKey)) {
+      throw new Error('请先完成输入法选词，再保存或结束编辑');
+    }
+    const node = this.state.selectedNode;
+    if (!node) return;
+    this.minder.off('layoutapply layoutallfinish', this.followEditLayout);
+    delete node._editingText;
+    if (node.getText() !== value) {
+      node.setText(value);
+      node.render();
+      this.minder.layout()._interactChange();
+      this.minder.fire('contentchange');
+    }
+    this.restoreEditingNodeLayer();
+    window.showEdit = false;
+    this.setState({ showEdit: false, inputContent: null });
+  };
+
+  saveAndWait = () => this.saveBarrier.save(async () => {
+    if (!this.canOperate()) throw new Error('当前尚未加载或没有操作权，无法确认保存');
+    this.commitCurrentInput();
+    this.pendingInputs.forEach(commit => commit());
+    if (!this.props.readOnly) this.minder.fire('contentchange');
+    clearTimeout(this.autoSaveTimer);
+    this.queuedSaveManual = undefined;
+    await this.saveBarrier.waitForUploads();
+    if (this.state.showEditImage || document.getElementsByClassName('yuntu-modal').length) {
+      throw new Error('请先完成或关闭当前弹窗，再保存或结束编辑');
+    }
+    await this.saveBarrier.waitUntil(() => !this.saveInFlight && !this.historyPending &&
+      !(this.pendingEditCount || 0) && this.expectedBase <= this.minder.getBase());
+    if (!this.canOperate()) throw new Error('当前连接不可操作，保存未完成');
+  }, () => {
+    this.saveCurrentCase(true);
+    this.setState({ saving: true }, this.syncInputOwnership);
+  });
+
+  onButtonSave = () => this.saveAndWait().catch(error => message.error(error.message || '保存未完成，请重试'));
+
+  beginSourceHistory = async () => {
+    if (!this.canEditContent()) return false;
+    try {
+      this.commitCurrentInput();
+      this.pendingInputs.forEach(commit => commit());
+      this.historyPending = true;
+      this.setState({ historyPending: true }, this.syncInputOwnership);
+      await this.saveBarrier.waitUntil(() => !(this.pendingEditCount || 0) &&
+        !this.saveInFlight && this.expectedBase <= this.minder.getBase());
+      return !this.unmounted && !this.pageBlocked;
+    } catch (error) {
+      this.historyPending = false;
+      if (!this.unmounted) this.setState({ historyPending: false }, this.syncInputOwnership);
+      message.error(error.message || '历史操作未完成');
+      return false;
+    }
+  };
+  handleSourceRevision = data => {
+    if (!this.historyPending || this.unmounted) return;
+    this.minder.setStatus('readonly');
+    this.minder.applyPatches(this.travere(JSON.parse(data)));
+    this.minder.setStatus('normal', true);
+    this.expectedBase = this.minder.getBase();
+    if (this.groupNode) this.groupNode.syncBase(this.expectedBase);
+    this.historyPending = false;
+    this.hasLocalEdits = true;
+    this.setState({ historyPending: false }, this.syncInputOwnership);
+    this.saveBarrier.notify();
+    this.flushQueuedSave();
+  };
+  handleSourceEditDenied = () => {
+    this.saveBarrier.fail(new Error('源用例被占用或无法编辑'));
+    if (this.props.onSourceEditDenied) this.props.onSourceEditDenied();
+  };
+  handleSocketFailure = () => {
+    this.saveBarrier.fail(new Error('服务端未能保存变更，请保留编辑内容并重试'));
+    message.error('服务端未能保存变更，请保留编辑内容并重试');
+  };
 
   handleSaveAck = result => {
+    this.saveInFlight = false;
+    this.setState({ saving: false }, this.syncInputOwnership);
+    this.saveBarrier.ack(result);
+    this.saveBarrier.notify();
     if (result === 'conflict') this.handleDataStale();
     else if (result !== 'ok') message.error('保存失败，请重试');
     else if (this.manualSavePending) message.success('保存成功');
     this.manualSavePending = false;
+    if (result === 'ok' && this.props.onSaveAcknowledged) this.props.onSaveAcknowledged();
+    this.flushQueuedSave();
   };
 
   blockUntilRefresh = text => {
     if (this.pageBlocked) return;
     this.pageBlocked = true;
+    this.saveBarrier.fail(new Error(text));
+    this.notifyOperationState();
     clearTimeout(this.autoSaveTimer);
     if (this.ws) {
       this.ws.skipCache = true;
@@ -1216,7 +1423,10 @@ class KityminderEditor extends Component {
     const childProps = {
       ...this.props,
       minder,
-      isLock,
+      isLock: isLock || loading || this.state.historyPending || this.state.saving || (this.props.sourceEditing && !locked),
+      trackImageWork: this.trackImageWork,
+      isEditorActive: () => !this.unmounted && this.canEditContent(),
+      registerPendingInput: this.registerPendingInput,
     };
 
     const tabContentClass = `toolbar has-right-border`;
@@ -1248,6 +1458,12 @@ class KityminderEditor extends Component {
               isOwnEditPending={() => (this.pendingEditCount || 0) > 0}
               handleServerSnapshot={(serialized, base) => { this.rawServerData = { serialized, base }; this.hasLocalEdits = false; }}
               handleEditAck={this.handleEditAck}
+              onImported={this.handleImported}
+              onSourceCaseUpdated={this.props.onSourceCaseUpdated}
+              onSourceEditDenied={this.handleSourceEditDenied}
+              handleSourceRevision={this.handleSourceRevision}
+              onFailure={this.handleSocketFailure}
+              onConnectionLost={() => this.saveBarrier.fail(new Error('连接已断开，保存未完成'))}
               // onError={e => {
               //   notification.info({
               //     message: 'websocket连接错误，错误详情：' + e,
@@ -1334,6 +1550,7 @@ class KityminderEditor extends Component {
                           size="small"
                           aria-label={locked ? '已锁定，仅当前用户可操作' : '已解锁'}
                           checked={locked}
+                          disabled={this.props.sourceEditing}
                           onChange={this.handleLockToggle}
                           className="yuntu-lock"
                         />
@@ -1373,6 +1590,9 @@ class KityminderEditor extends Component {
                   <ThemeGroup {...childProps} />
                   <TemplateGroup {...childProps} />
                   <FontGroup {...childProps} />
+                  <div className="mindmap-mark-group"><span className="mindmap-group-label">优先级</span><PriorityGroup {...childProps} /></div>
+                  <div className="mindmap-mark-group"><span className="mindmap-group-label">标签</span><TagGroup {...childProps} /></div>
+                  {!readOnly && <MediaGroup {...childProps} toolbar={{ ...this.props.toolbar, addFactor: false }} />}
                 </div>}
               </TabPane>
             </Tabs>
@@ -1380,7 +1600,7 @@ class KityminderEditor extends Component {
           <div
             className="kityminder-core-container"
             ref={input => {
-              if (!this.minder) {
+              if (input && !this.minder) {
                 this.minder = new window.kityminder.Minder({
                   renderTo: input,
                   disableNodeDrag: progressShow,
@@ -1388,6 +1608,7 @@ class KityminderEditor extends Component {
                 this.centerNode = input;
                 this.initOnEvent(this.minder);
                 this.initHotbox(this.minder);
+                if (this.props.sourceEditing) this.minder.setStatus('readonly');
               }
             }}
           >
@@ -1397,12 +1618,13 @@ class KityminderEditor extends Component {
               <ExecutionFloatingPanels
                 minder={minder}
                 selectedNode={selectedNode}
-                isLock={isLock}
+                isLock={childProps.isLock}
                 planCycle={planCycle}
                 baseUrl={this.props.baseUrl}
                 uploadUrl={this.props.uploadUrl}
                 onExecutionChange={this.handleExecutionChange}
                 onChange={() => this.forceUpdate()}
+                registerPendingInput={this.registerPendingInput}
               />
             )}
           </div>
@@ -1490,6 +1712,7 @@ class KityminderEditor extends Component {
                 initData={this.initData}
                 {...childProps}
                 wsInstance={this.ws}
+                beginSourceHistory={this.beginSourceHistory}
               />
               {!readOnly && (
                 <Tooltip title="插入图片">
@@ -1511,6 +1734,8 @@ class KityminderEditor extends Component {
               initialFile={this.state.pastedImageFile}
               baseUrl={this.props.baseUrl}
               uploadUrl={this.props.uploadUrl}
+              trackImageWork={this.trackImageWork}
+              isEditorActive={() => !this.unmounted && this.canEditContent()}
               onCancel={() => this.setState({ showEditImage: false, pastedImageFile: null })}
             />
           )}
@@ -1532,6 +1757,7 @@ class KityminderEditor extends Component {
                 className="ant-input"
                 tabIndex={showEdit ? 0 : -1}
                 rows={1}
+                readOnly={!this.canEditContent()}
                 defaultValue=""
                 onInput={this.handleEditInput}
                 onCompositionStart={() => {

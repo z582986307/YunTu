@@ -1,147 +1,103 @@
 import React, { Component } from 'react';
-import { Tag, Input, Icon, message, Tooltip } from 'antd';
-import { getUsedResource } from '../util';
-import debounce from 'lodash/debounce';
+import { Tag, Input, Button, Icon, message } from 'antd';
+import { runInSlices } from '../progressiveRender';
+
+const cleanTags = values => Array.from(new Set((Array.isArray(values) ? values : [])
+  .filter(value => typeof value === 'string').map(value => value.trim()).filter(Boolean)));
 
 class TagGroup extends Component {
-  state = { value: '', selectedResource: [], newTags: [], inputVisible: false, inputValue: '' };
+  state = { selectedResource: [], availableTags: [], newTags: [], inputVisible: false, inputValue: '' };
   componentDidMount() {
-    let { minder } = this.props;
-    minder.on('contentchange selectionchange', () => {
-      const selectedResource = minder.queryCommandValue('Resource');
-      this.setState({ selectedResource });
-    });
+    this.props.minder.on('selectionchange', this.updateSelection);
+    this.props.minder.on('contentchange', this.onContentChange);
+    this.props.minder.on('import progressiveimportdone', this.refreshAvailableTags);
+    this.updateSelection();
+    this.refreshAvailableTags();
   }
-  handleClose = (removedTag) => {
-    const newTags = this.state.newTags.filter((tag) => tag !== removedTag);
-    this.setState({ newTags });
+  componentWillUnmount() {
+    this.unmounted = true;
+    clearTimeout(this.scanTimer);
+    if (this.scanTask) this.scanTask.cancelled = true;
+    this.props.minder.off('selectionchange', this.updateSelection);
+    this.props.minder.off('contentchange', this.onContentChange);
+    this.props.minder.off('import progressiveimportdone', this.refreshAvailableTags);
+    window.tagInput = false;
+  }
+  disabled = () => this.props.readOnly || this.props.isLock || !this.props.minder.getSelectedNodes().length;
+  updateSelection = () => {
+    if (!this.unmounted) this.setState({ selectedResource: cleanTags(this.props.minder.queryCommandValue('Resource')) });
+  };
+  onContentChange = () => {
+    this.updateSelection();
+    clearTimeout(this.scanTimer);
+    this.scanTimer = setTimeout(this.refreshAvailableTags, 800);
+  };
+  refreshAvailableTags = async () => {
+    if (this.scanTask) this.scanTask.cancelled = true;
+    const task = { cancelled: false };
+    this.scanTask = task;
+    const tags = new Set();
+    const nodes = [this.props.minder.getRoot()];
+    await runInSlices(nodes, node => {
+      nodes.push(...node.getChildren());
+      cleanTags(node.getData('resource')).forEach(tag => tags.add(tag));
+    }, task);
+    if (!task.cancelled && !this.unmounted) this.setState({ availableTags: Array.from(tags) });
   };
   showInput = () => {
+    if (this.disabled()) return;
     window.tagInput = true;
-    this.setState({ inputVisible: true }, () => this.input.focus());
+    this.setState({ inputVisible: true }, () => this.input && this.input.focus());
   };
-  handleInputChange = (e) => {
-    this.setState({ inputValue: e.target.value });
-  };
+  handleInputChange = event => this.setState({ inputValue: event.target.value });
   handleInputConfirm = () => {
-    const { inputValue } = this.state;
-    let { newTags } = this.state;
-    const { minder } = this.props;
-    let tags = getUsedResource(minder.getAllNode());
-    if (inputValue && newTags.indexOf(inputValue) === -1 && tags.indexOf(inputValue) === -1) {
-      newTags = [...newTags, inputValue];
-    } else if (newTags.indexOf(inputValue) !== -1 || tags.indexOf(inputValue) !== -1) {
-      message.warning('该标识已存在！');
+    const value = this.state.inputValue.trim();
+    const exists = cleanTags([...(this.props.tags || []), ...this.state.availableTags, ...this.state.newTags]);
+    if (value && !this.disabled()) {
+      if (exists.includes(value)) message.info('该标签已存在，点击标签即可应用到选中节点');
+      else this.setState({ newTags: [...this.state.newTags, value] });
     }
-    this.setState(
-      {
-        newTags,
-        inputVisible: false,
-        inputValue: '',
-      },
-      () => {
-        window.tagInput = false;
-      }
-    );
+    this.setState({ inputVisible: false, inputValue: '' });
+    window.tagInput = false;
   };
-  saveInputRef = (input) => (this.input = input);
-  onAdd = (newResource) => {
-    const { minder } = this.props;
-    let resource = [];
-    const oldResource = minder.queryCommandValue('Resource');
-    if (oldResource.indexOf(newResource) < 0) {
-      resource = [...oldResource, newResource];
-      minder.execCommand('Resource', resource);
-    }
+  onAdd = value => {
+    if (this.disabled()) return;
+    const tag = String(value || '').trim();
+    if (!tag) return;
+    const resource = cleanTags(this.props.minder.queryCommandValue('Resource'));
+    if (!resource.includes(tag)) this.props.minder.execCommand('Resource', [...resource, tag]);
+    this.updateSelection();
   };
-  onRemove = (oldResource) => {
-    const { minder } = this.props;
-    let resource = [];
-    const current = minder.queryCommandValue('Resource');
-    if (current.indexOf(oldResource) > -1) {
-      resource = current.filter((item) => item !== oldResource && item !== null);
-      if (resource.length === 0) {
-        resource = null;
-      }
-    }
-    minder.execCommand('Resource', resource);
-  };
-  handleClick = (e, item) => {
-    if (!this._delayedClick) {
-      this._delayedClick = debounce(this.doClick, 500);
-    }
-    if (this.clickedOnce) {
-      this._delayedClick.cancel();
-      this.clickedOnce = false;
-      this.onRemove(item);
-    } else {
-      this._delayedClick(e);
-      this.clickedOnce = true;
-      this.onAdd(item);
-    }
-  };
-  doClick = () => {
-    this.clickedOnce = undefined;
-  };
-  renderTags = (itemList, closable) => {
-    const { minder, isLock } = this.props;
-    let disabled = minder.getSelectedNodes().length === 0;
-    if (isLock) disabled = true;
-    return itemList.map((item) => {
-      const backgroundColor = minder.getResourceColor(item).toHEX();
-      return (
-        <Tag
-          key={item}
-          className={`resource-tag${disabled ? ' disabled' : ''}`}
-          disabled={disabled}
-          closable={closable}
-          color={backgroundColor}
-          onClick={(e) => (disabled ? null : this.handleClick(e, item))}
-          onClose={() => this.handleClose(item)}
-        >
-          {item}
-        </Tag>
-      );
-    });
+  onRemove = value => {
+    if (this.disabled()) return;
+    const resource = cleanTags(this.props.minder.queryCommandValue('Resource')).filter(tag => tag !== value);
+    this.props.minder.execCommand('Resource', resource.length ? resource : null);
+    this.updateSelection();
   };
   render() {
-    const { newTags, inputVisible, inputValue } = this.state;
-    const { minder, tags } = this.props;
-    let resourceList = getUsedResource(minder.getAllNode());
-    let oldResource = resourceList.filter(
-      (item) => newTags.indexOf(item) < 0 && tags.indexOf(item) < 0 && item !== 'undefined'
-    );
-    return (
-      <div className="nodes-actions" style={{ width: 360, padding: '0px 4px' }}>
-        <Tooltip
-          title="选中节点后，单击添加标签，双击移除标签。"
-          getPopupContainer={(triggerNode) => triggerNode.parentNode}
-        >
-          <div style={{ display: 'inline-block' }}>
-            {tags && this.renderTags(tags, false)}
-            {oldResource && this.renderTags(oldResource, false)}
-            {newTags && this.renderTags(newTags, true)}
-          </div>
-        </Tooltip>
-        {inputVisible && (
-          <Input
-            ref={this.saveInputRef}
-            type="text"
-            size="small"
-            style={{ width: 78 }}
-            value={inputValue}
-            onChange={this.handleInputChange}
-            onBlur={this.handleInputConfirm}
-            onPressEnter={this.handleInputConfirm}
-          />
-        )}
-        {!inputVisible && (
-          <Tag onClick={this.showInput} style={{ background: '#fff', borderStyle: 'dashed' }}>
-            <Icon type="plus" /> 增加标签
-          </Tag>
-        )}
+    const { selectedResource, availableTags, newTags, inputVisible, inputValue } = this.state;
+    const disabled = this.disabled();
+    const tags = cleanTags([...(this.props.tags || []), ...availableTags, ...newTags, ...selectedResource]);
+    return <div className="nodes-actions mindmap-tag-actions">
+      <span className="mindmap-tag-hint">点击应用；已选标签可移除</span>
+      <div className="mindmap-tag-list">
+        {tags.map(tag => <Tag key={tag} color={selectedResource.includes(tag) ? 'blue' : undefined}
+          closable={!disabled && (selectedResource.includes(tag) || newTags.includes(tag))}
+          onClose={event => {
+            event.preventDefault();
+            if (selectedResource.includes(tag)) this.onRemove(tag);
+            else this.setState({ newTags: newTags.filter(value => value !== tag) });
+          }}>
+          <button type="button" disabled={disabled} className="mindmap-tag-button"
+            aria-label={`${selectedResource.includes(tag) ? '已应用标签' : '应用标签'}：${tag}`}
+            aria-pressed={selectedResource.includes(tag)} onClick={() => this.onAdd(tag)}>{tag}</button>
+        </Tag>)}
       </div>
-    );
+      {inputVisible ? <Input ref={input => { this.input = input; }} size="small" value={inputValue}
+        aria-label="新标签名称" onChange={this.handleInputChange} onBlur={this.handleInputConfirm}
+        onPressEnter={this.handleInputConfirm} disabled={disabled} /> :
+        <Button type="link" size="small" disabled={disabled} onClick={this.showInput}><Icon type="plus" />增加标签</Button>}
+    </div>;
   }
 }
 export default TagGroup;

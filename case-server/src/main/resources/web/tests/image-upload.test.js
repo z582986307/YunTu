@@ -47,3 +47,29 @@ test('选中节点粘贴图片后直接写入节点，不经过弹窗', async ()
     global.fetch = originalFetch
   }
 })
+
+test('粘贴保存等待图片命令的异步写入完成', async () => {
+  const previous = global.fetch
+  global.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ success: 1, data: [{ url: '/image.png' }] }) })
+  let finish
+  let inserted = false
+  const pending = pasteImageIntoNode({}, {}, { select: () => {}, execCommand: () => new Promise(resolve => { finish = resolve }) })
+    .then(() => { inserted = true })
+  try {
+    for (let index = 0; index < 10; index += 1) await Promise.resolve()
+    expect(inserted).toBe(false)
+    finish()
+    await pending
+    expect(inserted).toBe(true)
+  } finally { global.fetch = previous }
+})
+
+test('编辑器已卸载时晚到上传结果不能写入旧脑图', async () => {
+  const previous = global.fetch
+  global.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ success: 1, data: [{ url: '/image.png' }] }) })
+  const minder = { select: jest.fn(), execCommand: jest.fn() }
+  try {
+    await expect(pasteImageIntoNode({}, {}, minder, '', '', () => false)).rejects.toThrow('已关闭')
+    expect(minder.execCommand).not.toHaveBeenCalled()
+  } finally { global.fetch = previous }
+})

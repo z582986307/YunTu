@@ -11,6 +11,9 @@ const ImageModal = (props) => {
   const [titleLength, setTitleLength] = React.useState((defaultObj.title || '').length);
   const [uploadVersion, setUploadVersion] = React.useState(0);
   const uploadSequence = React.useRef(0);
+  const alive = React.useRef(true);
+  const active = () => alive.current && (!props.isEditorActive || props.isEditorActive());
+  const track = promise => props.trackImageWork ? props.trackImageWork(promise) : promise;
 
   const checkImage = url => new Promise((resolve, reject) => {
     const image = new Image();
@@ -30,23 +33,26 @@ const ImageModal = (props) => {
         return;
       }
       setBusy(true);
-      checkImage(uploadedUrl).then(() => {
-        minder.execCommand('image', uploadedUrl, values.title);
-        setTimeout(onCancel, 300);
-      }).catch(error => message.error(error.message)).then(() => setBusy(false));
+      track(checkImage(uploadedUrl).then(async () => {
+        if (!active()) throw new Error('编辑器已关闭或失去操作权，图片未插入');
+        await minder.execCommand('image', uploadedUrl, values.title);
+        if (active()) onCancel();
+      })).catch(error => alive.current && message.error(error.message))
+        .then(() => alive.current && setBusy(false));
     });
   };
   const selectImage = (file, success) => {
     const sequence = ++uploadSequence.current;
     setBusy(true);
-    uploadImage(file, baseUrl, uploadUrl).then(url => checkImage(url).then(() => url)).then(url => {
+    track(uploadImage(file, baseUrl, uploadUrl).then(url => checkImage(url).then(() => url))).then(url => {
+      if (!active()) return;
       if (sequence !== uploadSequence.current) return;
       setUploadedUrl(url);
       if (success) success({ success: 1, data: [{ url }] });
     }).catch(error => {
-      if (sequence === uploadSequence.current) message.error(error.message);
+      if (alive.current && sequence === uploadSequence.current) message.error(error.message);
     }).then(() => {
-      if (sequence === uploadSequence.current) setBusy(false);
+      if (alive.current && sequence === uploadSequence.current) setBusy(false);
     });
   };
   const onPaste = event => {
@@ -58,6 +64,7 @@ const ImageModal = (props) => {
 
   React.useEffect(() => {
     if (props.initialFile) selectImage(props.initialFile);
+    return () => { alive.current = false; uploadSequence.current += 1; };
   }, []);
 
   return (
