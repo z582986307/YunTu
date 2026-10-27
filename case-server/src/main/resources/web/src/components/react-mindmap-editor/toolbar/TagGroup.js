@@ -50,7 +50,17 @@ class TagGroup extends Component {
     this.setState({ inputVisible: true }, () => this.input && this.input.focus());
   };
   handleInputChange = event => this.setState({ inputValue: event.target.value });
-  handleInputConfirm = () => {
+  stopInputKeyboard = event => {
+    if (!event || !/^key/.test(event.type)) return;
+    event.stopPropagation();
+    // React16 与脑图原生监听都在 document；只停止合成冒泡不足以阻止后续原生监听。
+    if (event.nativeEvent && event.nativeEvent.stopImmediatePropagation) event.nativeEvent.stopImmediatePropagation();
+  };
+  handleInputConfirm = event => {
+    this.stopInputKeyboard(event);
+    if (this.composing || (event && (event.isComposing || event.keyCode === 229 ||
+        (event.nativeEvent && event.nativeEvent.isComposing) ||
+        (this.pendingImeEnter && event.type === 'keydown')))) return;
     const value = this.state.inputValue.trim();
     const exists = cleanTags([...(this.props.tags || []), ...this.state.availableTags, ...this.state.newTags]);
     if (value && !this.disabled()) {
@@ -95,6 +105,10 @@ class TagGroup extends Component {
       </div>
       {inputVisible ? <Input ref={input => { this.input = input; }} size="small" value={inputValue}
         aria-label="新标签名称" onChange={this.handleInputChange} onBlur={this.handleInputConfirm}
+        onKeyDown={this.stopInputKeyboard}
+        onKeyUp={event => { this.stopInputKeyboard(event); if (!this.composing) this.pendingImeEnter = false; }}
+        onCompositionStart={() => { this.composing = true; this.pendingImeEnter = false; }}
+        onCompositionEnd={() => { this.composing = false; this.pendingImeEnter = true; }}
         onPressEnter={this.handleInputConfirm} disabled={disabled} /> :
         <Button type="link" size="small" disabled={disabled} onClick={this.showInput}><Icon type="plus" />增加标签</Button>}
     </div>;
