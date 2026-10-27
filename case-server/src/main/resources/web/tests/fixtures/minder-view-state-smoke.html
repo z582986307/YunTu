@@ -1,0 +1,145 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>.canvas { position:absolute;left:0;top:40px;width:1000px;height:700px; }</style>
+<script src="../../node_modules/kity/dist/kity.js"></script>
+<script src="../../src/components/react-mindmap-editor/assets/kityminder-core/kityminder.core.js"></script>
+<script type="module">
+import { captureViewState, restoreViewState } from '../../src/components/react-mindmap-editor/util/viewState.js';
+import { importMindMapProgressively } from '../../src/components/react-mindmap-editor/largeMindMap.js';
+const check = (condition, message) => { if (!condition) throw new Error(message); };
+const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+const completed = timeline => !timeline || ['stoped', 'finished'].includes(timeline.status);
+const settle = async minder => {
+  // 等待真实动画/布局完成条件，不以固定延时猜测恢复成功。
+  for (let count = 0; count < 300; count++) {
+    await frame();
+    if (!minder._pendingLayout && completed(minder.getViewDragger().timeline())) return;
+  }
+  throw new Error('真实视图动画未结束');
+};
+const create = options => {
+  const container = document.createElement('div');
+  container.className = 'canvas';
+  document.body.appendChild(container);
+  const minder = new window.kityminder.Minder({ renderTo: container, ...options });
+  return { minder, container, dispose() { minder.destroy(); container.remove(); } };
+};
+const data = { version:'1.4.43', base:0, root:{data:{id:'r',text:'fixture-root'},children:[
+  {data:{id:'p',text:'fixture-parent'},children:[{data:{id:'a',text:'fixture-leaf'}}]},
+]} };
+const anchor = (f, id) => {
+  const node = f.minder.getNodeById(id).getRenderContainer().node;
+  check(node.isConnected, '选中目标必须真实挂载');
+  const bounds = node.getBoundingClientRect(), canvas = f.container.getBoundingClientRect();
+  return { x:bounds.left-canvas.left, y:bounds.top-canvas.top };
+};
+const verify = (f, state) => {
+  const actual = anchor(f, state.selectedIds[0]);
+  const error = Math.max(Math.abs(actual.x-state.anchor.x), Math.abs(actual.y-state.anchor.y));
+  check(error <= 2, `恢复后锚点漂移 ${error.toFixed(3)}px`);
+  check(f.minder.queryCommandValue('Zoom') === state.zoom, '缩放不一致');
+};
+window.runViewStateSmoke = async () => {
+  const results = [];
+  const source = create({ layoutAnimationDuration:0 });
+  let target;
+  try {
+    await importMindMapProgressively(source.minder, data);
+    source.minder.select(source.minder.getNodeById('a'), true);
+    await settle(source.minder);
+    source.minder.getViewDragger().move({x:-80,y:30}, 0);
+    const saved = captureViewState(source.minder, source.container);
+    source.dispose();
+    target = create();
+    await importMindMapProgressively(target.minder, data);
+    // 对应真实 import/layout 的入视野动画；不替换任何生产方法。
+    target.minder.execCommand('camera', target.minder.getRoot());
+    check(target.minder.getViewDragger().timeline(), '必须存在竞争的真实 timeline');
+    let lateCamera = 0;
+    const centerAfterLayout = () => {
+      lateCamera++;
+      target.minder.execCommand('camera',target.minder.getRoot());
+    };
+    target.minder.on('layoutallfinish',centerAfterLayout);
+    await restoreViewState(target.minder, target.container, saved);
+    verify(target, saved);
+    await settle(target.minder);
+    verify(target, saved);
+    results.push('初始布局及旧视图动画不会覆盖恢复锚点');
+    const parent = target.minder.getNodeById('p');
+    parent.collapse();
+    target.minder.layout();
+    await restoreViewState(target.minder, target.container, saved);
+    await settle(target.minder);
+    verify(target, saved);
+    check(parent.isExpanded(), '祖先未展开');
+    results.push('恢复等待祖先展开后的真实布局');
+    check(lateCamera > 0, '必须覆盖布局完成监听器中的晚 camera');
+    target.minder.off('layoutallfinish',centerAfterLayout);
+    const viewDuration = target.minder.getOption('viewAnimationDuration');
+    const zoomDuration = target.minder.getOption('zoomAnimationDuration');
+    const layoutDuration = target.minder.getOption('layoutAnimationDuration');
+    let cancelled = false;
+    target.minder.layout();
+    const interrupted = restoreViewState(target.minder,target.container,saved,()=>cancelled);
+    cancelled = true;
+    check(await interrupted === false, '取消恢复不应报告成功');
+    check(!target.minder._restoringViewState, '取消后恢复门禁未清理');
+    check(target.minder.getOption('viewAnimationDuration') === viewDuration &&
+      target.minder.getOption('zoomAnimationDuration') === zoomDuration &&
+      target.minder.getOption('layoutAnimationDuration') === layoutDuration, '取消后动画选项未恢复');
+    await new Promise(resolve => {
+      const done = () => { target.minder.off('layoutallfinish',done); resolve(); };
+      target.minder.on('layoutallfinish',done);
+    });
+    const failZoom = () => { throw new Error('fixture zoom failure'); };
+    target.minder.on('zoom',failZoom);
+    let failed = false;
+    try { await restoreViewState(target.minder,target.container,saved); }
+    catch (error) { failed = error.message === 'fixture zoom failure'; }
+    target.minder.off('zoom',failZoom);
+    check(failed && !target.minder._restoringViewState, '异常恢复必须拒绝且清理门禁');
+    check(target.minder.getOption('viewAnimationDuration') === viewDuration &&
+      target.minder.getOption('zoomAnimationDuration') === zoomDuration &&
+      target.minder.getOption('layoutAnimationDuration') === layoutDuration, '异常后动画选项未恢复');
+    results.push('取消及真实事件异常恢复选项与门禁，布局晚 camera 不覆盖');
+    target.minder.getViewDragger().move({x:3000,y:3000},0);
+    const before = target.minder.getViewDragger().getMovement();
+    target.minder.select(target.minder.getRoot(),true);
+    await settle(target.minder);
+    const after = target.minder.getViewDragger().getMovement();
+    check(before.x !== after.x || before.y !== after.y, '恢复后普通选择自动入视野未恢复');
+    results.push('普通选择自动入视野保持正常');
+    target.dispose();
+    target = create();
+    const medium = Array.from({length:600}, (_,i)=>({data:{id:`m${i}`,text:`fixture-${i}`}}));
+    await importMindMapProgressively(target.minder,{...data,root:{data:data.root.data,children:medium}});
+    const mediumState = {selectedIds:['m599'],ancestorIds:['r'],zoom:120,anchor:{x:240,y:180}};
+    await restoreViewState(target.minder,target.container,mediumState);
+    await settle(target.minder);
+    verify(target,mediumState);
+    results.push('分片导入但非释放图形的中图恢复锚点正确');
+    target.dispose();
+    target = create();
+    const children = Array.from({length:2100}, (_,i)=>({data:{id:`v${i}`,text:`fixture-${i}`}}));
+    await importMindMapProgressively(target.minder,{...data, root:{data:data.root.data,children}});
+    const far = target.minder.getNodeById('v2099');
+    check(!far.rc || !far.rc.node.isConnected, '远区测试必须从释放图形开始');
+    const farState = {selectedIds:['v2099'],ancestorIds:['r'],zoom:120,anchor:{x:240,y:180}};
+    await restoreViewState(target.minder,target.container,farState);
+    await settle(target.minder);
+    verify(target,farState);
+    results.push('虚拟绘制远叶恢复后已挂载且DOM锚点正确');
+    const failLayout = () => { throw new Error('fixture layout failure'); };
+    target.minder.on('layoutapply',failLayout);
+    target.minder.layout();
+    let layoutFailed = false;
+    try { await restoreViewState(target.minder,target.container,farState); }
+    catch (error) { layoutFailed = error.message === 'fixture layout failure'; }
+    target.minder.off('layoutapply',failLayout);
+    check(layoutFailed && !target.minder._restoringViewState, '分片布局失败不能报告恢复成功且必须释放门禁');
+    results.push('真实分片布局拒绝不会虚报恢复成功');
+    return results;
+  } finally { if (target) target.dispose(); }
+};
+</script>

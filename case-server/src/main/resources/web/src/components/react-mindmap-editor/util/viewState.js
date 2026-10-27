@@ -28,12 +28,45 @@ export const captureViewState = (minder, container) => {
 
 export const restoreViewState = async (minder, container, value, cancelled = () => false) => {
   const state = validateViewState(value);
-  if (!state || cancelled()) return false;
+  if (!state || cancelled() || minder._restoringViewState) return false;
+  const token = {};
+  minder._restoringViewState = token;
+  const stopped = () => cancelled() || minder._destroyed;
+  let observedLayout;
+  let layoutError;
+  const waitForLayout = async () => {
+    while (!stopped()) {
+      const pending = minder._pendingLayout;
+      const completion = minder._viewLayoutCompletion;
+      if (layoutError) throw layoutError;
+      if (pending && pending !== observedLayout) {
+        observedLayout = pending;
+        pending.then(() => {}, error => { layoutError = error; });
+      }
+      if (!pending && (!completion || completion.finished)) return true;
+      // RAF 只检查生产完成条件；不把经过的帧数/毫秒数当作成功。
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+    return false;
+  };
+  const dragger = minder.getViewDragger();
+  const stopMovement = () => {
+    const timeline = dragger.timeline && dragger.timeline();
+    if (timeline) {
+      // kity.stop 会写入终点，但不会触发 finish，所以同时清除旧 timeline 引用。
+      timeline.stop();
+      dragger._moveTimeline = null;
+    }
+  };
   const viewDuration = minder.getOption('viewAnimationDuration');
   const zoomDuration = minder.getOption('zoomAnimationDuration');
+  const layoutDuration = minder.getOption('layoutAnimationDuration');
   minder.setOption('viewAnimationDuration', 0);
   minder.setOption('zoomAnimationDuration', 0);
   try {
+    stopMovement();
+    if (!(await waitForLayout())) return false;
+    minder.setOption('layoutAnimationDuration', 0);
     minder.execCommand('Zoom', state.zoom);
     let selected = state.selectedIds.map(id => minder.getNodeById(id)).filter(Boolean);
     if (!selected.length && state.selectedIds.length) {
@@ -47,14 +80,14 @@ export const restoreViewState = async (minder, container, value, cancelled = () 
     });
     if (expanded) {
       minder.layout(0);
-      if (minder._pendingLayout) await minder._pendingLayout;
+      if (!(await waitForLayout())) return false;
     }
-    if (cancelled()) return false;
+    if (stopped()) return false;
     minder.select(selected, true);
     const node = selected[0];
     const element = node && node.getRenderContainer && node.getRenderContainer().node;
-    const dragger = minder.getViewDragger();
-    if (element && state.anchor) {
+    // select 的真实 selectionchange 同步恢复被虚拟绘制释放的目标分组后才测量。
+    if (element && element.isConnected !== false && state.anchor) {
       const bounds = element.getBoundingClientRect();
       const canvas = container.getBoundingClientRect();
       const scale = state.zoom / 100;
@@ -68,6 +101,8 @@ export const restoreViewState = async (minder, container, value, cancelled = () 
   } finally {
     minder.setOption('viewAnimationDuration', viewDuration);
     minder.setOption('zoomAnimationDuration', zoomDuration);
+    minder.setOption('layoutAnimationDuration', layoutDuration);
+    if (minder._restoringViewState === token) delete minder._restoringViewState;
   }
 };
 

@@ -1974,6 +1974,8 @@
       kity.extendClass(Minder, {
         layout: function () {
           if (this._scheduleLayout && !this._progressiveImporting) return this._scheduleLayout();
+          // 恢复视图需等待实际末帧及 layoutallfinish，不能按动画时长猜测。
+          var completion = this._viewLayoutCompletion = { finished: false };
           var duration = this.getOption('layoutAnimationDuration');
           this.getRoot().traverse(function (node) {
             // clear last results
@@ -2005,7 +2007,8 @@
              * @author Naixor
              */
             setTimeout(function () {
-              minder.fire('layoutallfinish');
+              try { minder.fire('layoutallfinish'); }
+              finally { completion.finished = true; }
             }, 0);
           });
           return this.fire('layout');
@@ -8412,6 +8415,7 @@
         var CameraCommand = kity.createClass('CameraCommand', {
           base: Command,
           execute: function (km, focusNode) {
+            if (km._restoringViewState) { this.setContentChanged(false); return; }
             focusNode = focusNode || km.getRoot();
             var viewport = km.getPaper().getViewPort();
             var offset = focusNode.getRenderContainer().getRenderBox('view');
@@ -8524,6 +8528,7 @@
               this._lastClientSize = a;
             },
             'selectionchange layoutallfinish': function (e) {
+              if (this._restoringViewState) return;
               var selected = this.getSelectedNode();
               var minder = this;
               /*
