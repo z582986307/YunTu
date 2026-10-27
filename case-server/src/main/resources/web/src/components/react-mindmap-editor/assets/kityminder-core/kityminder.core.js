@@ -2226,7 +2226,7 @@
           }
         },
         _garbage: function () {
-          this.clearSelect();
+          this.removeAllSelectedNodes();
           while (this._root.getChildren().length) {
             this._root.removeChild(0);
           }

@@ -1,0 +1,42 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Minder 生命周期回归</title>
+<div id="result" data-status="pending"></div>
+<script src="../../node_modules/kity/dist/kity.js"></script>
+<script src="../../src/components/react-mindmap-editor/assets/kityminder-core/kityminder.core.js"></script>
+<script>
+  // 必须执行真实构造、选择、垃圾清理及模块销毁；不替换生产方法。
+  var result = document.getElementById('result');
+  function check(condition, message) {
+    if (!condition) throw new Error(message);
+  }
+  try {
+    for (var cycle = 0; cycle < 3; cycle++) {
+      var container = document.createElement('div');
+      container.style.cssText = 'width:800px;height:600px';
+      document.body.appendChild(container);
+      var minder = new window.kityminder.Minder({ renderTo: container });
+      minder.importJson({ version: '1.4.43', base: 0, root: {
+        data: { id: 'root', text: 'fixture-root' },
+        children: [{ data: { id: 'leaf', text: 'fixture-leaf' } }],
+      } });
+      check(minder.getBase() === 0 && minder.exportJson().base === 0, 'base 0 未保留');
+      minder.select(minder.getRoot().getChildren()[0], true);
+      check(minder.getSelectedNodes().length === 1, '销毁前必须存在真实选中节点');
+      var disposed = 0;
+      minder._globalDisposers.push(function () { disposed++; });
+      minder.destroy();
+      check(minder.getSelectedNodes().length === 0, '销毁后选中节点未清空');
+      check(minder.getRoot().getChildren().length === 0, '销毁后子节点未移除');
+      check(disposed === 1, '全局监听清理未执行');
+      minder.destroy();
+      check(disposed === 1, '重复销毁重复执行清理');
+      container.remove();
+    }
+    result.dataset.status = 'passed';
+    result.textContent = 'PASS: 3 次真实 Minder 初始化、选择、完整销毁及重复销毁';
+  } catch (error) {
+    result.dataset.status = 'failed';
+    result.textContent = error.name + ': ' + error.message;
+  }
+</script>
