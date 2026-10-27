@@ -14,6 +14,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 import com.corundumstudio.socketio.listener.ConnectListener;
 import com.corundumstudio.socketio.listener.DisconnectListener;
+import com.corundumstudio.socketio.listener.DataListener;
 
 import java.util.*;
 import java.util.concurrent.ExecutorService;
@@ -225,6 +226,84 @@ public class TaskSourceEditingTests {
                 "[[{\"op\":\"replace\",\"path\":\"/root/children/0/data/text\",\"value\":\"过期写入\"}]]", 40)).run();
         assertEquals(refreshed, task.getCaseContent());
         verify(oldPage, times(2)).sendEvent(eq("stale_data_event"), any(PushMessage.class));
+    }
+
+    @Test
+    public void queuedEditCannotWriteReorderedTaskAfterSourceRefreshAndDisconnect() throws Exception {
+        RecordEntity task = task(900L);
+        ExecutorService ingress = mock(ExecutorService.class);
+        List<Runnable> queued = new ArrayList<>();
+        doAnswer(call -> { queued.add((Runnable) call.getArgument(0)); return null; })
+                .when(ingress).submit(any(Runnable.class));
+        ConnectListener connect = connections(ingress);
+        SocketIOClient oldPage = taskClient("900");
+        connect.onConnect(oldPage);
+        ArgumentCaptor<DataListener> editListener = ArgumentCaptor.forClass(DataListener.class);
+        verify(server).addEventListener(eq("edit"), eq(EditMessage.class), editListener.capture());
+        editListener.getValue().onData(oldPage, new EditMessage("",
+                "[[{\"op\":\"add\",\"path\":\"/root/children/0/data/progress\",\"value\":9}]]", 3), null);
+        assertEquals(1, queued.size());
+
+        JSONObject reordered = JSON.parseObject(source(4, "新版用例"));
+        Collections.reverse(reordered.getJSONObject("root").getJSONArray("children"));
+        stored = reordered.toJSONString();
+        SocketIOClient newPage = taskClient("900");
+        connect.onConnect(newPage);
+        assertEquals("hidden", leaf(task.getCaseContent()).getString("id"));
+        ArgumentCaptor<DisconnectListener> disconnect = ArgumentCaptor.forClass(DisconnectListener.class);
+        verify(server).addDisconnectListener(disconnect.capture());
+        disconnect.getValue().onDisconnect(oldPage);
+        assertEquals(1, task.getClientNum());
+        assertFalse(task.isLockedByClient());
+        String refreshed = task.getCaseContent();
+        String persisted = records.selectOne(900L).getCaseContent();
+        clearInvocations(oldPage, records, broadcasts);
+
+        queued.forEach(Runnable::run);
+
+        assertEquals(refreshed, task.getCaseContent());
+        assertEquals(persisted, records.selectOne(900L).getCaseContent());
+        verify(records, never()).update(any(ExecRecord.class));
+        verify(oldPage, never()).sendEvent(eq("edit_ack_event"), any(PushMessage.class));
+        verify(broadcasts, never()).sendEvent(eq("edit_notify_event"), any(SocketIOClient.class), any(PushMessage.class));
+        verify(oldPage).sendEvent(eq("stale_data_event"), any(PushMessage.class));
+    }
+
+    @Test
+    public void queuedSavesCannotPersistAfterSourceRefreshAndDisconnect() throws Exception {
+        RecordEntity task = task(900L);
+        ExecutorService ingress = mock(ExecutorService.class);
+        List<Runnable> queued = new ArrayList<>();
+        doAnswer(call -> { queued.add((Runnable) call.getArgument(0)); return null; })
+                .when(ingress).submit(any(Runnable.class));
+        ConnectListener connect = connections(ingress);
+        SocketIOClient oldPage = taskClient("900");
+        connect.onConnect(oldPage);
+        // Both save variants capture the room before being queued, unlike submitRoomWrite.
+        for (String event : Arrays.asList("save", "autosave")) {
+            ArgumentCaptor<DataListener> listener = ArgumentCaptor.forClass(DataListener.class);
+            verify(server).addEventListener(eq(event), eq(EditMessage.class), listener.capture());
+            listener.getValue().onData(oldPage,
+                    new EditMessage(task.getCaseContent().replace("byte-blue", "ink-black"), "", 3), null);
+        }
+        stored = source(4, "新版用例");
+        connect.onConnect(taskClient("900"));
+        ArgumentCaptor<DisconnectListener> disconnect = ArgumentCaptor.forClass(DisconnectListener.class);
+        verify(server).addDisconnectListener(disconnect.capture());
+        disconnect.getValue().onDisconnect(oldPage);
+        String refreshed = task.getCaseContent();
+        String persisted = records.selectOne(900L).getCaseContent();
+        clearInvocations(oldPage, records);
+
+        queued.forEach(Runnable::run);
+
+        assertEquals(refreshed, task.getCaseContent());
+        assertEquals(persisted, records.selectOne(900L).getCaseContent());
+        verify(records, never()).update(any(ExecRecord.class));
+        verify(oldPage, times(2)).sendEvent(eq("stale_data_event"), any(PushMessage.class));
+        ArgumentCaptor<PushMessage> acknowledgement = ArgumentCaptor.forClass(PushMessage.class);
+        verify(oldPage, times(2)).sendEvent(eq("save_ack_event"), acknowledgement.capture());
+        for (PushMessage result : acknowledgement.getAllValues()) assertEquals("conflict", result.getMessage());
     }
 
     @Test
@@ -460,12 +539,16 @@ public class TaskSourceEditingTests {
     }
 
     private ConnectListener connections() {
+        return connections(egress);
+    }
+
+    private ConnectListener connections(ExecutorService ingress) {
         SocketIOServiceImpl service = new SocketIOServiceImpl();
         ReflectionTestUtils.setField(service, "socketIOServer", server);
         ReflectionTestUtils.setField(service, "caseMapper", cases);
         ReflectionTestUtils.setField(service, "recordMapper", records);
         ReflectionTestUtils.setField(service, "executorEgressService", egress);
-        ReflectionTestUtils.setField(service, "executorIngressService", egress);
+        ReflectionTestUtils.setField(service, "executorIngressService", ingress);
         service.start();
         ArgumentCaptor<ConnectListener> listener = ArgumentCaptor.forClass(ConnectListener.class);
         verify(server).addConnectListener(listener.capture());

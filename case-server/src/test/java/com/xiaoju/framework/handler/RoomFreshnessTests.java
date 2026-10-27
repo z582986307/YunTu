@@ -29,6 +29,29 @@ import static org.mockito.Mockito.eq;
 
 public class RoomFreshnessTests {
     @Test
+    public void disconnectedSessionRemainsInvalidAfterItsFreshnessMarkersAreForgotten() {
+        TestCaseMapper mapper = mock(TestCaseMapper.class);
+        TestCase content = new TestCase();
+        content.setCaseContent("{\"base\":1,\"root\":{\"data\":{\"id\":\"root\"},\"children\":[]}}");
+        when(mapper.selectOne(7L)).thenReturn(content);
+        RoomEntity room = new RoomEntity("7", 7L, mapper);
+        UUID oldSession = UUID.randomUUID();
+        UUID currentSession = UUID.randomUUID();
+        SocketIOClient oldClient = mock(SocketIOClient.class);
+        when(oldClient.getSessionId()).thenReturn(oldSession);
+        room.clientMap.put(oldSession, "${LOGIN_ACCOUNT}");
+        room.invalidateExistingClients(2);
+        room.clientMap.put(currentSession, "${LOGIN_ACCOUNT}");
+
+        room.forgetClient(oldClient);
+
+        assertFalse(room.hasForeignEditSince(oldSession, 1));
+        assertTrue(room.isStaleClient(oldSession));
+        assertFalse(room.isStaleClient(currentSession));
+        assertTrue(room.isStaleClient(UUID.randomUUID()));
+    }
+
+    @Test
     public void duplicateConnectForSameSessionDoesNotJoinRoomAgain() {
         TestCaseMapper mapper = mock(TestCaseMapper.class);
         TestCase content = new TestCase();

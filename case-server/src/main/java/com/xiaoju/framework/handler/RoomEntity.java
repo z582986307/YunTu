@@ -78,7 +78,8 @@ public class RoomEntity {
     }
 
     public synchronized boolean isStaleClient(UUID client) {
-        return staleClients.contains(client);
+        // 已排队的写任务可能在断开、清除失效标记后才出队，离房会话仍须拒绝。
+        return !clientMap.containsKey(client) || staleClients.contains(client);
     }
 
     protected void invalidateExistingClients(int version) {
