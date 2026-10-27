@@ -91,11 +91,14 @@ export const restoreViewState = async (minder, container, value, cancelled = () 
       const bounds = element.getBoundingClientRect();
       const canvas = container.getBoundingClientRect();
       const scale = state.zoom / 100;
-      dragger.move({ x: (state.anchor.x - bounds.left + canvas.left) / scale,
-        y: (state.anchor.y - bounds.top + canvas.top) / scale }, 0);
+      const current = dragger.getMovement();
+      // kity 的 Point.round 会朝零截断；恢复目标先取最近模型整数，避免 DOM 浮点噪声偏移一格。
+      dragger.move({ x: Math.round(current.x + (state.anchor.x - bounds.left + canvas.left) / scale) - current.x,
+        y: Math.round(current.y + (state.anchor.y - bounds.top + canvas.top) / scale) - current.y }, 0);
     } else if (state.movement) {
       const current = dragger.getMovement();
-      dragger.move({ x: state.movement.x - current.x, y: state.movement.y - current.y }, 0);
+      dragger.move({ x: Math.round(state.movement.x) - current.x,
+        y: Math.round(state.movement.y) - current.y }, 0);
     }
     return true;
   } finally {

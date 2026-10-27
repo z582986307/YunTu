@@ -5,7 +5,7 @@
 <script src="../../src/components/react-mindmap-editor/assets/kityminder-core/kityminder.core.js"></script>
 <script type="module">
 import { captureViewState, restoreViewState } from '../../src/components/react-mindmap-editor/util/viewState.js';
-import { importMindMapProgressively } from '../../src/components/react-mindmap-editor/largeMindMap.js';
+import { importMindMapProgressively, cancelMindMapImport } from '../../src/components/react-mindmap-editor/largeMindMap.js';
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
 const completed = timeline => !timeline || ['stoped', 'finished'].includes(timeline.status);
@@ -38,6 +38,119 @@ const verify = (f, state) => {
   const error = Math.max(Math.abs(actual.x-state.anchor.x), Math.abs(actual.y-state.anchor.y));
   check(error <= 2, `恢复后锚点漂移 ${error.toFixed(3)}px`);
   check(f.minder.queryCommandValue('Zoom') === state.zoom, '缩放不一致');
+};
+window.runViewStateQuantizationSmoke = async () => {
+  const results = [];
+  let f = create({layoutAnimationDuration:0});
+  try {
+    await importMindMapProgressively(f.minder, data);
+    f.minder.select(f.minder.getNodeById('a'), true);
+    f.minder.execCommand('Zoom', 120);
+    await settle(f.minder);
+    for (const position of [{x:80,y:-30}, {x:-80,y:30}]) {
+      const dragger = f.minder.getViewDragger();
+      dragger.moveTo(new window.kity.Point(position.x, position.y), 0);
+      for (let round = 0; round < 5; round++) {
+        const state = captureViewState(f.minder, f.container);
+        // 真实 DOM 测量值附加亚像素舍入噪声，保持 kity/core/helper 全部真实执行。
+        state.anchor.x -= Math.sign(position.x) * 0.000001;
+        state.anchor.y -= Math.sign(position.y) * 0.000001;
+        await restoreViewState(f.minder, f.container, state);
+        const actual = dragger.getMovement();
+        check(actual.x === position.x && actual.y === position.y,
+          `浮点扰动不应走整模型像素: 期望 ${position.x},${position.y}; 实际 ${actual.x},${actual.y}`);
+      }
+    }
+    results.push('120% 正负目标的微小DOM测量扰动，重复恢复各5次平移不变');
+    const saved = captureViewState(f.minder, f.container);
+    const changed = JSON.parse(JSON.stringify(data));
+    changed.root.children[0].data.text = 'fixture-parent with a changed layout width';
+    await importMindMapProgressively(f.minder, changed);
+    await restoreViewState(f.minder, f.container, saved);
+    await settle(f.minder);
+    const distance = state => {
+      const actual = anchor(f, 'a');
+      return Math.max(Math.abs(actual.x - state.anchor.x), Math.abs(actual.y - state.anchor.y));
+    };
+    const layoutError = distance(saved);
+    // 120% 的最近整数模型坐标，理论量化界限为 0.6px；另留 0.02px DOM 测量误差。
+    check(layoutError <= 0.62, `修改布局后超过最近像素量化界限: ${layoutError}px`);
+    results.push(`120% 修改布局恢复误差 ${layoutError.toFixed(6)}px（界限0.62px）`);
+    let persisted = captureViewState(f.minder, f.container);
+    const refreshBaseline = persisted;
+    let refreshError = 0;
+    for (let round = 0; round < 5; round++) {
+      f.dispose();
+      f = create();
+      await importMindMapProgressively(f.minder, changed);
+      await restoreViewState(f.minder, f.container, persisted);
+      await settle(f.minder);
+      refreshError = Math.max(refreshError, distance(refreshBaseline));
+      check(refreshError <= 0.62, `重复刷新偏移超过最近像素界限: ${refreshError}px`);
+      persisted = captureViewState(f.minder, f.container);
+    }
+    results.push(`120% 重建实例模拟刷新5次，累计最大误差 ${refreshError.toFixed(6)}px`);
+    return results;
+  } finally { f.dispose(); }
+};
+window.runProgressiveCompletionSmoke = async () => {
+  const results = [];
+  for (const scenario of ['complete', 'new-layout', 'error', 'cancel']) {
+    // 让初始根节点动画必然先被分片绘制停止，不依赖机器速度碰到竞态。
+    const f = create({layoutAnimationDuration:60000});
+    let initialCompletion, initialTimeline, laterCompletion;
+    let finalEventSeen = false;
+    try {
+      f.minder.on('layout', () => {
+        if (!initialCompletion) {
+          initialCompletion = f.minder._viewLayoutCompletion;
+          initialTimeline = f.minder.getRoot()._layoutTimeline;
+        }
+      });
+      f.minder.on('layoutallfinish', () => {
+        if (finalEventSeen) return;
+        finalEventSeen = true;
+        check(!initialCompletion.finished, '不得在真实完成监听执行前标记成功');
+        if (scenario === 'new-layout') {
+          f.minder.layout();
+          laterCompletion = f.minder._viewLayoutCompletion;
+        }
+        if (scenario === 'error') throw new Error('fixture completion failure');
+        if (scenario === 'cancel') cancelMindMapImport(f.minder);
+      });
+      let failure, imported;
+      try {
+        imported = await importMindMapProgressively(f.minder, {...data, root:{data:{...data.root.data},
+          children:Array.from({length:600}, (_,i)=>({data:{id:`c${i}`,text:`completion-${i}`}}))}});
+      } catch (error) { failure = error; }
+      check(initialTimeline && initialTimeline.status === 'stoped', '必须实际停止初始节点布局动画');
+      check(finalEventSeen, '必须执行真实分片 layoutallfinish');
+      if (scenario === 'error') {
+        check(failure && failure.message === 'fixture completion failure', '完成监听异常必须原样拒绝');
+        check(f.minder._mindMapImportFailed && !f.minder._mindMapImport.completed && !initialCompletion.finished,
+          '异常不能伪报导入或旧布局完成');
+        results.push('分片完成监听异常保持拒绝，不标记成功');
+      } else if (scenario === 'cancel') {
+        check(!failure && imported.cancelled && !f.minder._mindMapImport.completed && !initialCompletion.finished,
+          '完成监听取消不能伪报导入或旧布局完成');
+        results.push('分片完成监听取消保持取消，不标记成功');
+      } else {
+        if (failure) throw failure;
+        check(initialCompletion.finished, '真实分片已完成却遗留被停止的初始布局标记');
+        if (scenario === 'new-layout') {
+          check(laterCompletion !== initialCompletion && !laterCompletion.finished,
+            '分片完成不得误标监听器创建的更晚布局');
+        }
+        const state = {selectedIds:['c599'],ancestorIds:['r'],zoom:120,anchor:{x:240,y:180}};
+        check(await restoreViewState(f.minder,f.container,state), '真实分片完成后应能恢复');
+        await settle(f.minder);
+        verify(f,state);
+        results.push(scenario === 'new-layout' ? '只完成被替代的旧布局，更晚布局单独完成后恢复' :
+          '初始节点动画被真实停止后，分片完成仍能恢复600节点视图');
+      }
+    } finally { f.dispose(); }
+  }
+  return results;
 };
 window.runViewStateSmoke = async () => {
   const results = [];

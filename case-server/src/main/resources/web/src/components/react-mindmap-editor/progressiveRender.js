@@ -93,6 +93,7 @@ const scheduleLayout = minder => {
 };
 
 export const renderMindMapProgressively = async (minder, nodes, task) => {
+  const replacedLayoutCompletion = minder._viewLayoutCompletion;
   minder._boundedRenderObjects = nodes.length > 2000;
   const visible = [];
   const visibleSet = new Set();
@@ -157,6 +158,8 @@ export const renderMindMapProgressively = async (minder, nodes, task) => {
   minder._progressiveApplying = false;
   minder.fire('layout');
   minder.fire('layoutallfinish');
+  // 分片已替代并停止初始节点动画；监听成功后只完成旧标记，不覆盖监听器发起的新布局。
+  if (!task.cancelled && replacedLayoutCompletion) replacedLayoutCompletion.finished = true;
   minder.fire('contentchange');
   minder._interactChange();
   if (minder._boundedRenderObjects) minder._scheduleLayout = () => scheduleLayout(minder);

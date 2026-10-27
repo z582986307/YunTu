@@ -36,10 +36,10 @@ public class SocketIOConfig {
     @Value("${socketio.pingInterval}")
     private int pingInterval;
 
-    @Value("2097152")
+    @Value("${socketio.maxFramePayloadLength:16777216}")
     private int maxFramePayloadLength;
 
-    @Value("2097152")
+    @Value("${socketio.maxHttpContentLength:16777216}")
     private int maxHttpContentLength;
 
 

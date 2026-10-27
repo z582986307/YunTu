@@ -29,15 +29,19 @@ const server = http.createServer((request, response) => {
     });
     const page = await browser.newPage();
     page.setDefaultTimeout(30000);
-    await page.goto(`http://127.0.0.1:${server.address().port}/tests/fixtures/minder-view-state-smoke.html`);
-    await page.waitForFunction('typeof window.runViewStateSmoke === "function"');
-    const results = await Promise.race([
-      page.evaluate(() => window.runViewStateSmoke()),
-      new Promise((resolve, reject) => {
-        deadline = setTimeout(() => reject(new Error('真实视图回归超过 30 秒失败上限')),30000);
-      }),
-    ]);
-    results.forEach(result => console.log(`PASS: ${result}`));
+    for (const suite of ['runProgressiveCompletionSmoke', 'runViewStateSmoke', 'runViewStateQuantizationSmoke']) {
+      // 每组从新页面开始，保持既有7项回归的初始环境和独立失败上限。
+      await page.goto(`http://127.0.0.1:${server.address().port}/tests/fixtures/minder-view-state-smoke.html`);
+      await page.waitForFunction(name => typeof window[name] === 'function', {}, suite);
+      const results = await Promise.race([
+        page.evaluate(name => window[name](), suite),
+        new Promise((resolve, reject) => {
+          deadline = setTimeout(() => reject(new Error(`${suite} 超过 30 秒失败上限`)),30000);
+        }),
+      ]);
+      clearTimeout(deadline);
+      results.forEach(result => console.log(`PASS: ${result}`));
+    }
   } finally {
     clearTimeout(deadline);
     if (browser) await browser.close();
