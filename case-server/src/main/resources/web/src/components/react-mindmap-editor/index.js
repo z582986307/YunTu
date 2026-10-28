@@ -1608,6 +1608,8 @@ class KityminderEditor extends Component {
                 <Button
                   key="full"
                   type="link"
+                  className="mindmap-tool-button"
+                  aria-pressed={fullScreen}
                   icon={`fullscreen${fullScreen ? '-exit' : ''}`}
                   onClick={() => {
                     this.setState({ fullScreen: !fullScreen });
@@ -1619,7 +1621,8 @@ class KityminderEditor extends Component {
                 type !== 'compare' && <Button
                   key="show"
                   type="link"
-                  className="mindmap-outlook-toggle"
+                  className="mindmap-outlook-toggle mindmap-tool-button"
+                  aria-expanded={showToolBar}
                   aria-label={showToolBar ? '收起外观' : '展开外观'}
                   title={showToolBar ? '收起外观' : '展开外观'}
                   onClick={() => this.setState({ showToolBar: !showToolBar })}

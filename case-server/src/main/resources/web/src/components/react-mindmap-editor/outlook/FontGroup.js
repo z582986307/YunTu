@@ -24,10 +24,13 @@ class FontGroup extends Component {
     if (isLock) disabled = true;
     const commonStyle = { size: 'small', disabled };
     return (
-      <div className="nodes-actions" style={{ width: 128 }}>
+      <div className="nodes-actions mindmap-font-group" style={{ width: 144 }}>
         <div>
           <Select
             {...commonStyle}
+            className="mindmap-tool-select"
+            aria-label="字号"
+            dropdownClassName="mindmap-tool-menu"
             value={FontSize || ''}
             onChange={(value) => this.onChange('FontSize', value)}
             dropdownMatchSelectWidth={false}

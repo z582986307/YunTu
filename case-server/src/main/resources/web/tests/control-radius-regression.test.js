@@ -31,7 +31,7 @@ assert(styles.includes('.ant-input'), '输入框应继承统一圆角')
 assert(styles.includes('.ant-select-selection'), '选择框应继承统一圆角')
 assert(styles.includes('.ant-modal-content'), '弹窗应继承统一圆角')
 assert(editorStyles.includes('border-radius: 8px;'), '撤销和重做应使用当前轻量圆角工具条样式')
-assert(editor.includes("className=\"mindmap-outlook-toggle\""), '外观入口应保留统一样式类')
+assert(/className="mindmap-outlook-toggle(?:\s[^"\n]*)?"/.test(editor), '外观入口应保留统一样式类，并允许共享按钮类')
 assert(themes.includes("'byte-blue': '天蓝色（新）'"), '天蓝色主题应以当前中文名称展示')
 
 console.log('control radius regression checks passed')

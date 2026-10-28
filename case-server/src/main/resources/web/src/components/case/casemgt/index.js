@@ -240,6 +240,9 @@ export default class CaseMgt extends React.Component {
           </span>
           <div className="case-detail-actions">
           {Number(iscore) === 3 && <Button
+            className="mindmap-tool-button case-source-edit-button"
+            icon={sourceEditing ? 'check' : 'edit'}
+            aria-pressed={sourceEditing}
             loading={switchingMode}
             disabled={!editorReady || switchingMode}
             onClick={sourceEditing ? this.finishSourceEditing : this.enterSourceEditing}

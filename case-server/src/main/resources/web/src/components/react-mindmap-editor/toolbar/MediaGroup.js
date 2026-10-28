@@ -3,7 +3,6 @@ import { Button, Dropdown, Menu, Icon } from 'antd';
 import {
   LinkModal,
   ImageModal,
-  NoteDrawer,
   NoteAddDrawer,
 } from '../components';
 import { shouldShowMediaToolbar } from '../executionPanelUtils';
@@ -12,9 +11,7 @@ import './MediaGroup.scss';
 class MediaGroup extends Component {
   state = {
     showLink: false,
-    showNote: false,
     showImage: false,
-    noteStatus: null,
     drawerVisible: false,
   };
   handleLinkMenuClick = ({ key }) => {
@@ -34,28 +31,19 @@ class MediaGroup extends Component {
       }, 100);
     }
   };
-  handleNoteMenuClick = ({ key }) => {
-    const { minder } = this.props;
-    if (key === 'add' || key === 'edit') {
-      this.setState({ showNote: true });
-    } else {
-      minder.execCommand('note', null);
-    }
-    this.setState({ noteStatus: minder.queryCommandValue('note') });
-  };
   renderMenu = (label, key) => {
     const { minder } = this.props;
     const selectedNode = minder.getSelectedNode();
     return (
       <Menu
+        className="mindmap-media-menu"
         onClick={params => {
           if (key === 'hyperlink') this.handleLinkMenuClick(params);
           if (key === 'image') this.handleImageMenuClick(params);
-          if (key === 'note') this.handleNoteMenuClick(params);
         }}
       >
         <Menu.Item key="add">插入{label}</Menu.Item>
-        <Menu.Item key="remove">移除已有{label}</Menu.Item>
+        <Menu.Item key="remove" className="mindmap-media-remove">移除已有{label}</Menu.Item>
         {selectedNode && selectedNode.getData(key) !== undefined && (
           <Menu.Item key="edit">编辑已有{label}</Menu.Item>
         )}
@@ -73,8 +61,6 @@ class MediaGroup extends Component {
     const {
       showLink,
       showImage,
-      showNote,
-      noteStatus,
       drawerVisible,
     } = this.state;
 
@@ -85,15 +71,9 @@ class MediaGroup extends Component {
 
     const linkMenu = this.renderMenu('链接', 'hyperlink');
     const imageMenu = this.renderMenu('图片', 'image');
-    const noteMenu = this.renderMenu('备注', 'note');
     return (
       <div
-        className="nodes-actions"
-        style={{
-          textAlign: 'center',
-          minWidth: showMediaActions ? 200 : 0,
-          paddingRight: 6,
-        }}
+        className="nodes-actions mindmap-media-actions"
       >
         {showMediaActions && (
           <Dropdown
@@ -102,11 +82,12 @@ class MediaGroup extends Component {
             disabled={disabled}
             getPopupContainer={triggerNode => triggerNode.parentNode}
           >
-            <Button type="link" size="small" className="big-icon">
-              <Icon type="link" style={{ fontSize: '1.6em' }} />
-              <br />
-              链接
-              <Icon type="caret-down" />
+            <Button type="link" size="small" className="mindmap-tool-button" disabled={disabled} aria-label="链接">
+              <svg className="mindmap-media-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m10 13 4-4M8 16l-1 1a4 4 0 0 1-6-6l4-4a4 4 0 0 1 6 0m2 1 1-1a4 4 0 0 1 6 6l-4 4a4 4 0 0 1-6 0" transform="translate(1 0)" />
+              </svg>
+              <span>链接</span>
+              <Icon type="down" />
             </Button>
           </Dropdown>
         )}
@@ -117,26 +98,14 @@ class MediaGroup extends Component {
             disabled={disabled}
             getPopupContainer={triggerNode => triggerNode.parentNode}
           >
-            <Button type="link" size="small" className="big-icon">
-              <Icon type="picture" style={{ fontSize: '1.6em' }} />
-              <br />
-              图片
-              <Icon type="caret-down" />
-            </Button>
-          </Dropdown>
-        )}
-        {showMediaActions && (
-          <Dropdown
-            overlay={noteMenu}
-            trigger={['click']}
-            disabled={disabled}
-            getPopupContainer={triggerNode => triggerNode.parentNode}
-          >
-            <Button type="link" size="small" className="big-icon">
-              <Icon type="file-text" style={{ fontSize: '1.6em' }} />
-              <br />
-              备注
-              <Icon type="caret-down" />
+            <Button type="link" size="small" className="mindmap-tool-button" disabled={disabled} aria-label="图片">
+              <svg className="mindmap-media-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="3" width="18" height="18" rx="3" />
+                <circle cx="8" cy="8" r="1.5" />
+                <path d="m3 17 5-5 4 4 4-6 5 7" />
+              </svg>
+              <span>图片</span>
+              <Icon type="down" />
             </Button>
           </Dropdown>
         )}
@@ -186,15 +155,6 @@ class MediaGroup extends Component {
           <ImageModal
             visible={showImage}
             onCancel={() => this.setState({ showImage: false })}
-            {...this.props}
-            minder={minder}
-          />
-        )}
-        {showNote && (
-          <NoteDrawer
-            noteStatus={noteStatus}
-            visible={showNote}
-            onCancel={() => this.setState({ showNote: false })}
             {...this.props}
             minder={minder}
           />

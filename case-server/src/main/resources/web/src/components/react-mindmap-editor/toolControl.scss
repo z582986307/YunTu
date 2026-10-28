@@ -1,0 +1,69 @@
+// 延续撤销/重做的页面实际样式：32px 高、10px 圆角、1px 中性边框。
+@mixin mindmap-tool-surface {
+  box-sizing: border-box;
+  height: 32px;
+  color: #475569;
+  font-weight: 500;
+  font-size: 14px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: none;
+  transition: color .15s, background-color .15s, border-color .15s;
+}
+@mixin mindmap-tool-active {
+  color: #246fff;
+  background: #f0f5ff;
+  border-color: #a9c8ff;
+  box-shadow: none;
+}
+@mixin mindmap-tool-disabled {
+  color: #94a3b8;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.ant-btn.mindmap-tool-button {
+  @include mindmap-tool-surface;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  white-space: nowrap;
+  > .anticon + span, > span + .anticon { margin-left: 0; }
+  .anticon, .mindmap-media-icon { flex: 0 0 auto; width: 14px; height: 14px; font-size: 14px; }
+  &:hover, &:active, &:focus, &[aria-pressed='true'] { @include mindmap-tool-active; }
+  &:focus-visible { outline: 2px solid #a9c8ff; outline-offset: 2px; }
+  &[disabled], &[disabled]:hover, &[disabled]:focus { @include mindmap-tool-disabled; }
+  &[disabled][aria-pressed='true'] { background: #f0f5ff; }
+}
+.mindmap-tool-select.ant-select {
+  min-width: 90px;
+  .ant-select-selection { @include mindmap-tool-surface; }
+  .ant-select-selection__rendered { margin: 0 26px 0 10px; line-height: 30px; }
+  .ant-select-arrow { right: 10px; color: #64748b; }
+  &:hover .ant-select-selection, &.ant-select-focused .ant-select-selection,
+  &.ant-select-open .ant-select-selection { @include mindmap-tool-active; }
+  &.ant-select-focused .ant-select-selection { outline: 2px solid #a9c8ff; outline-offset: 2px; }
+  &.ant-select-disabled .ant-select-selection { @include mindmap-tool-disabled; }
+}
+.mindmap-tool-menu.ant-select-dropdown, .mindmap-media-menu.ant-dropdown-menu {
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .12);
+  .ant-select-dropdown-menu-item, .ant-dropdown-menu-item {
+    min-height: 32px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  .ant-select-dropdown-menu-item-selected, .ant-select-dropdown-menu-item-active,
+  .ant-dropdown-menu-item:hover { color: #246fff; background: #f0f5ff; }
+  .mindmap-media-remove { color: #ef4444; }
+}

@@ -91,7 +91,9 @@ class TagGroup extends Component {
     return <div className="nodes-actions mindmap-tag-actions">
       <span className="mindmap-tag-hint">点击应用；已选标签可移除</span>
       <div className="mindmap-tag-list">
-        {tags.map(tag => <Tag key={tag} color={selectedResource.includes(tag) ? 'blue' : undefined}
+        {tags.map(tag => <Tag key={tag}
+          className={`mindmap-tool-tag${selectedResource.includes(tag) ? ' is-selected' : ''}`}
+          aria-disabled={disabled}
           closable={!disabled && (selectedResource.includes(tag) || newTags.includes(tag))}
           onClose={event => {
             event.preventDefault();
@@ -99,18 +101,20 @@ class TagGroup extends Component {
             else this.setState({ newTags: newTags.filter(value => value !== tag) });
           }}>
           <button type="button" disabled={disabled} className="mindmap-tag-button"
+            title={tag}
             aria-label={`${selectedResource.includes(tag) ? '已应用标签' : '应用标签'}：${tag}`}
             aria-pressed={selectedResource.includes(tag)} onClick={() => this.onAdd(tag)}>{tag}</button>
         </Tag>)}
       </div>
       {inputVisible ? <Input ref={input => { this.input = input; }} size="small" value={inputValue}
+        className="mindmap-tag-input"
         aria-label="新标签名称" onChange={this.handleInputChange} onBlur={this.handleInputConfirm}
         onKeyDown={this.stopInputKeyboard}
         onKeyUp={event => { this.stopInputKeyboard(event); if (!this.composing) this.pendingImeEnter = false; }}
         onCompositionStart={() => { this.composing = true; this.pendingImeEnter = false; }}
         onCompositionEnd={() => { this.composing = false; this.pendingImeEnter = true; }}
         onPressEnter={this.handleInputConfirm} disabled={disabled} /> :
-        <Button type="link" size="small" disabled={disabled} onClick={this.showInput}><Icon type="plus" />增加标签</Button>}
+        <Button type="link" className="mindmap-tool-button mindmap-tag-add" size="small" disabled={disabled} onClick={this.showInput}><Icon type="plus" />添加标签</Button>}
     </div>;
   }
 }

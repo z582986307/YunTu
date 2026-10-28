@@ -1,3 +1,4 @@
+@import './toolControl';
 // * {
 //   touch-action: none;
 // }
@@ -117,9 +118,6 @@
   .ant-btn-link {
     vertical-align: middle;
     border: none;
-    &.priority-btn {
-      color: #fff !important;
-    }
   }
   &.ant-tabs {
     overflow: visible;
@@ -429,16 +427,57 @@
   font-size: 12px;
   line-height: 20px;
 }
-.mindmap-tag-actions { max-width: 360px; padding: 0 4px; }
-.mindmap-tag-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 78px; overflow: auto; }
+.mindmap-tag-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 360px; padding: 0; }
+.mindmap-tag-hint { flex-basis: 100%; }
+.mindmap-tag-list { display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%; max-height: 78px; overflow: auto; }
+.mindmap-tool-tag.ant-tag {
+  @include mindmap-tool-surface;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 8px;
+  &:hover, &:focus-within, &.is-selected { @include mindmap-tool-active; }
+  &[aria-disabled='true'], &[aria-disabled='true']:hover { @include mindmap-tool-disabled; }
+  .anticon-close { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 24px; margin: 0; color: #64748b; }
+  .anticon-close:hover { color: #ef4444; }
+}
+.mindmap-tag-input.ant-input {
+  @include mindmap-tool-surface;
+  width: 140px;
+  max-width: 100%;
+  &:focus { @include mindmap-tool-active; }
+}
 .mindmap-tag-button {
+  min-width: 0;
+  max-width: 220px;
+  height: 30px;
   padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
+  font: inherit;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   cursor: pointer;
   &:disabled { cursor: not-allowed; opacity: .5; }
   &:focus-visible { outline: 2px solid #3370ff; outline-offset: 2px; }
+}
+.kityminder-tools-tab .ant-btn.ant-btn-link.mindmap-tool-button {
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  &:hover, &:active, &:focus, &[aria-pressed='true'] { @include mindmap-tool-active; }
+  &[disabled], &[disabled]:hover, &[disabled]:focus { @include mindmap-tool-disabled; }
+}
+.mindmap-font-group { display: flex; flex-direction: column; gap: 6px; padding: 0 8px; }
+.mindmap-mark-group { gap: 6px; }
+.mindmap-media-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 8px; }
+.kityminder-tools-tab .ant-tabs-extra-content { gap: 8px; }
+@media (max-width: 1100px) {
+  .kityminder-tools-tab .ant-tabs-extra-content { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
+  .mindmap-mark-group { padding-top: 6px; padding-bottom: 6px; }
 }
 .yuntu-lock-wrap {
   display: inline-flex;
