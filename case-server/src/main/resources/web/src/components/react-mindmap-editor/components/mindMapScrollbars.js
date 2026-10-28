@@ -3,14 +3,15 @@ import React, { Component } from 'react';
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 export const getScrollAxis = (start, end, viewStart, viewSize, trackSize) => {
-  const min = Math.min(start, viewStart);
-  const max = Math.max(end - viewSize, viewStart);
+  // 手动平移可能使视野越出内容；不能把这段空白反过来扩成滚动条的合法范围。
+  const min = start;
+  const max = Math.max(start, end - viewSize);
   const range = max - min;
   const thumbSize = range ? clamp(trackSize * viewSize / (range + viewSize), Math.min(28, trackSize), trackSize) : trackSize;
   const travel = trackSize - thumbSize;
   return {
     size: thumbSize,
-    offset: range ? (viewStart - min) / range * travel : 0,
+    offset: range ? clamp((viewStart - min) / range, 0, 1) * travel : 0,
     position: ratio => min + clamp(ratio, 0, 1) * range,
     travel,
   };
@@ -56,9 +57,18 @@ class MindMapScrollbars extends Component {
     return Number.isFinite(bounds.left) ? bounds : null;
   };
 
+  readView = () => {
+    const { minder } = this.props;
+    const target = minder.getRenderTarget();
+    const movement = minder.getViewDragger().getMovement();
+    // 外观栏仅改变flex容器尺寸，不触发window resize；禁止复用core的_lastClientSize。
+    return minder.getPaper().getViewPortMatrix().inverse().translate(-movement.x, -movement.y)
+      .transformBox({ x: 0, y: 0, width: target.clientWidth, height: target.clientHeight });
+  };
+
   updateView = () => {
     this.frame = null;
-    const view = this.props.minder.getViewDragger().getView();
+    const view = this.readView();
     this.setState({ view });
   };
 
@@ -77,7 +87,7 @@ class MindMapScrollbars extends Component {
   scrollTo = (axis, position) => {
     const { minder } = this.props;
     const dragger = minder.getViewDragger();
-    const view = dragger.getView();
+    const view = this.readView();
     const movement = dragger.getMovement();
     dragger.moveTo(new window.kity.Point(
       movement.x + (axis === 'x' ? view.left - position : 0),
@@ -90,7 +100,8 @@ class MindMapScrollbars extends Component {
     event.stopPropagation();
     const track = event.currentTarget;
     const rect = track.getBoundingClientRect();
-    const { bounds, view } = this.state;
+    const { bounds } = this.state;
+    const view = this.readView();
     if (!bounds || !view) return;
     const length = axis === 'x' ? rect.width : rect.height;
     const geometry = axis === 'x'
@@ -109,7 +120,7 @@ class MindMapScrollbars extends Component {
     if (!this.drag) return;
     const { axis, rect, grip } = this.drag;
     const { bounds } = this.state;
-    const view = this.props.minder.getViewDragger().getView();
+    const view = this.readView();
     const length = axis === 'x' ? rect.width : rect.height;
     const geometry = axis === 'x'
       ? getScrollAxis(bounds.left, bounds.right, view.left, view.width, length)
@@ -129,10 +140,10 @@ class MindMapScrollbars extends Component {
   onKeyDown = (axis, event) => {
     const { bounds } = this.state;
     if (!bounds) return;
-    const view = this.props.minder.getViewDragger().getView();
+    const view = this.readView();
     const horizontal = axis === 'x';
     const start = horizontal ? bounds.left : bounds.top;
-    const end = horizontal ? bounds.right - view.width : bounds.bottom - view.height;
+    const end = Math.max(start, horizontal ? bounds.right - view.width : bounds.bottom - view.height);
     const current = horizontal ? view.left : view.top;
     const page = horizontal ? view.width : view.height;
     let next;

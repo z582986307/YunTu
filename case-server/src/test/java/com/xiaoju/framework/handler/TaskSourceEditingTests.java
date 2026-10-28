@@ -52,6 +52,59 @@ public class TaskSourceEditingTests {
     }
 
     @Test
+    public void sourceLockChangesNotifyTasksWithoutConfusingTaskLocks() {
+        task(900L);
+        RoomEntity source = room();
+        source.setSourceCaseUpdateNotifier(new SourceCaseUpdateNotifier(server));
+        SocketIOClient owner = client(null);
+        source.addClient(owner);
+        source.clientUnlock();
+        source.clientLock(owner);
+        ArgumentCaptor<PushMessage> updates = ArgumentCaptor.forClass(PushMessage.class);
+        verify(broadcasts, times(3)).sendEvent(eq("source_case_lock_event"), updates.capture());
+        assertEquals(Arrays.asList("true", "false", "true"), Arrays.asList(
+                updates.getAllValues().get(0).getMessage(), updates.getAllValues().get(1).getMessage(),
+                updates.getAllValues().get(2).getMessage()));
+        clearInvocations(broadcasts);
+        RecordEntity task = task(900L);
+        task.setSourceCaseUpdateNotifier(new SourceCaseUpdateNotifier(server));
+        task.addClient(taskClient("900"));
+        task.clientUnlock();
+        verify(broadcasts, never()).sendEvent(eq("source_case_lock_event"), any(PushMessage.class));
+    }
+
+    @Test
+    public void taskReceivesReadOnlyInitialSourceLockAndOwnerDisconnectUpdate() {
+        task(900L);
+        ConnectListener connect = connections();
+        SocketIOClient owner = client(null);
+        connect.onConnect(owner);
+        RoomEntity source = SocketIOServiceImpl.clientRoomMap.get(owner);
+        SocketIOClient taskPage = taskClient("900");
+        connect.onConnect(taskPage);
+        ArgumentCaptor<PushMessage> initial = ArgumentCaptor.forClass(PushMessage.class);
+        verify(taskPage).sendEvent(eq("source_case_lock_event"), initial.capture());
+        assertEquals("true", initial.getValue().getMessage());
+        assertTrue(source.lockByClient(owner));
+        assertEquals(1, source.getClientNum());
+        ArgumentCaptor<DisconnectListener> disconnect = ArgumentCaptor.forClass(DisconnectListener.class);
+        verify(server).addDisconnectListener(disconnect.capture());
+        clearInvocations(broadcasts);
+        disconnect.getValue().onDisconnect(owner);
+        verify(broadcasts).sendEvent(eq("source_case_lock_event"), argThat((PushMessage value) -> "false".equals(value.getMessage())));
+    }
+
+    @Test
+    public void taskSourceLockProbeDoesNotCreateSourceRoomOrTakeAnySourceLock() {
+        task(900L);
+        SocketIOClient taskPage = taskClient("900");
+        connections().onConnect(taskPage);
+        assertTrue(RoomFactory.roomEntityMap.isEmpty());
+        verify(taskPage).sendEvent(eq("source_case_lock_event"), argThat((PushMessage value) -> "false".equals(value.getMessage())));
+        verify(cases, never()).update(any(TestCase.class));
+    }
+
+    @Test
     public void sourceTaskPatchIsStoredBeforeSuccessAcknowledgement() throws Exception {
         RoomEntity room = room();
         SocketIOClient editor = client("900");
@@ -325,6 +378,86 @@ public class TaskSourceEditingTests {
         new RedoIngressTask(editor, server, room, egress, PushMessage.builder().message(patch.replace("撤销内容", "重做内容")).build()).run();
         assertEquals(before, room.getCaseContent());
         verify(broadcasts, never()).sendEvent(eq("redo"), eq(editor), any(PushMessage.class));
+    }
+
+    @Test
+    public void ordinarySourceTagUndoAndRedoKeepMonotonicRevisionAndCanBeManuallySaved() {
+        stored = stored.replace("\"priority\":1", "\"priority\":1,\"resource\":[\"synthetic-tag\"]");
+        RoomEntity source = room();
+        SocketIOClient editor = client(null);
+        source.addClient(editor);
+        CaseBackupMapper backups = mock(CaseBackupMapper.class);
+        when(backups.selectByCaseId(12L, null, null)).thenReturn(Collections.emptyList());
+        when(backups.insert(any())).thenReturn(1);
+        String undo = "[{\"op\":\"remove\",\"path\":\"/root/children/0/data/resource\"},"
+                + "{\"op\":\"replace\",\"path\":\"/base\",\"value\":2}]";
+
+        new UndoIngressTask(editor, server, source, egress, PushMessage.builder().message(undo).build()).run();
+
+        assertEquals(4, JSON.parseObject(source.getCaseContent()).getIntValue("base"));
+        assertFalse(leaf(source.getCaseContent()).containsKey("resource"));
+        assertEquals(3, JSON.parseObject(stored).getIntValue("base"));
+        verify(editor).sendEvent(eq("source_revision_event"), any(PushMessage.class));
+        new SaveIngressTask(editor, server, source, egress, EditMessage.builder()
+                .caseContent(source.getCaseContent()).build(), backups).run();
+        assertEquals(4, JSON.parseObject(stored).getIntValue("base"));
+        assertFalse(leaf(stored).containsKey("resource"));
+        verify(editor).sendEvent(eq("save_ack_event"), argThat((PushMessage value) -> "ok".equals(value.getMessage())));
+        clearInvocations(editor);
+
+        String redo = "[{\"op\":\"add\",\"path\":\"/root/children/0/data/resource\",\"value\":[\"synthetic-tag\"]},"
+                + "{\"op\":\"replace\",\"path\":\"/base\",\"value\":3}]";
+        new RedoIngressTask(editor, server, source, egress, PushMessage.builder().message(redo).build()).run();
+        assertEquals(5, JSON.parseObject(source.getCaseContent()).getIntValue("base"));
+        verify(editor).sendEvent(eq("source_revision_event"), any(PushMessage.class));
+        new SaveIngressTask(editor, server, source, egress, EditMessage.builder()
+                .caseContent(source.getCaseContent()).build(), backups).run();
+        assertEquals(5, JSON.parseObject(stored).getIntValue("base"));
+        assertEquals("synthetic-tag", leaf(stored).getJSONArray("resource").getString(0));
+        verify(editor).sendEvent(eq("save_ack_event"), argThat((PushMessage value) -> "ok".equals(value.getMessage())));
+    }
+
+    @Test
+    public void executionRoomHistoryRetainsExistingVersionAndAcknowledgementContract() {
+        RecordEntity execution = task(900L);
+        SocketIOClient executor = taskClient("900");
+        execution.addClient(executor);
+        String undo = "[{\"op\":\"replace\",\"path\":\"/base\",\"value\":2}]";
+
+        new UndoIngressTask(executor, server, execution, egress, PushMessage.builder().message(undo).build()).run();
+
+        assertEquals(2, JSON.parseObject(execution.getCaseContent()).getIntValue("base"));
+        verify(executor, never()).sendEvent(eq("source_revision_event"), any(PushMessage.class));
+        verify(broadcasts).sendEvent(eq("undo"), eq(executor), any(PushMessage.class));
+    }
+
+    @Test
+    public void laggingSourceReaderCannotOverwriteSavedHistoryAfterOwnerUnlocks() {
+        RoomEntity source = room();
+        SocketIOClient owner = client(null);
+        SocketIOClient reader = client(null);
+        source.addClient(owner);
+        source.addClient(reader);
+        String undo = "[{\"op\":\"replace\",\"path\":\"/root/children/0/data/text\",\"value\":\"history-value\"},"
+                + "{\"op\":\"replace\",\"path\":\"/base\",\"value\":2}]";
+        new UndoIngressTask(owner, server, source, egress, PushMessage.builder().message(undo).build()).run();
+        CaseBackupMapper backups = mock(CaseBackupMapper.class);
+        when(backups.selectByCaseId(12L, null, null)).thenReturn(Collections.emptyList());
+        when(backups.insert(any())).thenReturn(1);
+        new SaveIngressTask(owner, server, source, egress, EditMessage.builder()
+                .caseContent(source.getCaseContent()).build(), backups).run();
+        assertEquals(4, JSON.parseObject(stored).getIntValue("base"));
+        source.clientUnlock();
+        clearInvocations(reader, broadcasts);
+        String saved = stored;
+
+        edit(source, reader);
+
+        assertEquals(saved, stored);
+        assertEquals(saved, source.getCaseContent());
+        verify(reader).sendEvent(eq("stale_data_event"), any(PushMessage.class));
+        verify(reader, never()).sendEvent(eq("edit_ack_event"), any(PushMessage.class));
+        verify(broadcasts, never()).sendEvent(eq("edit_notify_event"), any(SocketIOClient.class), any(PushMessage.class));
     }
 
     @Test

@@ -93,6 +93,11 @@ class Socket extends React.Component {
         websocket.on('source_case_updated', evt => {
             if (!this.unmounted && this.props.onSourceCaseUpdated) this.props.onSourceCaseUpdated(evt.message);
         });
+        websocket.on('source_case_lock_event', evt => {
+            if (this.unmounted || !this.props.onSourceCaseLockChanged) return;
+            if (evt.message === 'true' || evt.message === true) this.props.onSourceCaseLockChanged(true);
+            else if (evt.message === 'false' || evt.message === false) this.props.onSourceCaseLockChanged(false);
+        });
         websocket.on('source_edit_denied', () => this.denySourceEditing());
         websocket.on('source_revision_event', async evt => {
             if (!(await this.waitForImport())) return;

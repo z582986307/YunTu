@@ -24,28 +24,9 @@ class FontGroup extends Component {
     if (isLock) disabled = true;
     const commonStyle = { size: 'small', disabled };
     return (
-      <div className="nodes-actions mindmap-font-group" style={{ width: 144 }}>
-        <div>
-          <Select
-            {...commonStyle}
-            className="mindmap-tool-select"
-            aria-label="字号"
-            dropdownClassName="mindmap-tool-menu"
-            value={FontSize || ''}
-            onChange={(value) => this.onChange('FontSize', value)}
-            dropdownMatchSelectWidth={false}
-            getPopupContainer={(triggerNode) => triggerNode.parentNode}
-          >
-            <Select.Option value="">字号</Select.Option>
-            {fontSizeList &&
-              fontSizeList.map((item) => (
-                <Select.Option key={item} value={item}>
-                  {item}
-                </Select.Option>
-              ))}
-          </Select>
-        </div>
-        <div>
+      <div className="nodes-actions mindmap-font-group mindmap-appearance-group">
+        <div className="mindmap-appearance-heading" aria-hidden="true" />
+        <div className="mindmap-font-actions">
           <Button
             icon="bold"
             title="加粗"
@@ -89,6 +70,15 @@ class FontGroup extends Component {
             icon="bg-colors"
             action="Background"
           />
+        </div>
+        <div className="mindmap-font-size">
+          <Select {...commonStyle} className="mindmap-tool-select" aria-label="字号"
+            dropdownClassName="mindmap-tool-menu" value={FontSize || ''}
+            onChange={(value) => this.onChange('FontSize', value)} dropdownMatchSelectWidth={false}
+            getPopupContainer={(triggerNode) => triggerNode.parentNode}>
+            <Select.Option value="">字号</Select.Option>
+            {fontSizeList && fontSizeList.map((item) => <Select.Option key={item} value={item}>{item}</Select.Option>)}
+          </Select>
         </div>
       </div>
     );

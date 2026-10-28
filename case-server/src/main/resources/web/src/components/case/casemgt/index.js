@@ -35,6 +35,8 @@ export default class CaseMgt extends React.Component {
       sourceEditing: false,
       switchingMode: false,
       editorReady: false,
+      sourceCaseLocked: false,
+      taskLockedByOther: false,
       sourceUpdated: false,
       editorEpoch: 0,
     };
@@ -44,13 +46,13 @@ export default class CaseMgt extends React.Component {
   }
 
   enterSourceEditing = async () => {
-    if (this.modeTransition || !this.editorNode || !this.editorNode.canOperate()) return;
+    if (this.modeTransition || this.state.sourceCaseLocked || this.state.taskLockedByOther || !this.editorNode || !this.editorNode.canOperate()) return;
     this.modeTransition = true;
     this.setState({ switchingMode: true });
     try {
       const editor = this.editorNode;
       await editor.saveAndWait();
-      if (this.unmounted) return;
+      if (this.unmounted || this.state.sourceCaseLocked || this.state.taskLockedByOther) return;
       this.taskViewState = editor.captureViewState();
       this.assignedNodeIds = editor.getAssignedNodeIds();
       this.setState(state => ({ sourceEditing: true, editorReady: false, editorEpoch: state.editorEpoch + 1 }));
@@ -90,6 +92,10 @@ export default class CaseMgt extends React.Component {
 
   handleSourceCaseUpdated = () => {
     if (!this.unmounted && !this.state.sourceEditing) this.setState({ sourceUpdated: true });
+  };
+
+  handleSourceCaseLockChanged = locked => {
+    if (!this.unmounted) this.setState({ sourceCaseLocked: Boolean(locked) });
   };
 
   refreshTask = async () => {
@@ -190,6 +196,7 @@ export default class CaseMgt extends React.Component {
     const { iscore, caseId, itemid } = match.params;
     const user = getCookies('username');
     const { recordDetail, casedetail, sourceEditing, switchingMode, editorEpoch, editorReady } = this.state;
+    const sourceEditLocked = !sourceEditing && (this.state.sourceCaseLocked || this.state.taskLockedByOther);
     let readOnly = false;
     let progressShow = false;
     let addFactor = false;
@@ -239,14 +246,15 @@ export default class CaseMgt extends React.Component {
               '未关联'}
           </span>
           <div className="case-detail-actions">
-          {Number(iscore) === 3 && <Button
+          {Number(iscore) === 3 && <Tooltip title={sourceEditLocked ? '源用例被锁定，不可编辑' : undefined}>
+          <span><Button
             className="mindmap-tool-button case-source-edit-button"
             icon={sourceEditing ? 'check' : 'edit'}
             aria-pressed={sourceEditing}
             loading={switchingMode}
-            disabled={!editorReady || switchingMode}
+            disabled={!editorReady || switchingMode || sourceEditLocked}
             onClick={sourceEditing ? this.finishSourceEditing : this.enterSourceEditing}
-          >{sourceEditing ? '结束编辑' : '编辑用例'}</Button>}
+          >{sourceEditing ? '结束编辑' : '编辑用例'}</Button></span></Tooltip>}
           {Number(iscore) !== 2 && (
             <Button
               type="primary"
@@ -299,8 +307,11 @@ export default class CaseMgt extends React.Component {
             assignedNodeIds={this.assignedNodeIds}
             initialViewState={this.taskViewState}
             viewStateKey={`mindmap-view:${caseId}:${itemid || 'case'}:${sourceEditing ? 'source' : (Number(iscore) === 3 ? 'task' : 'case')}`}
-            onOperationStateChanged={ready => !this.unmounted && this.setState({ editorReady: ready })}
+            onOperationStateChanged={(ready, status) => !this.unmounted && this.setState({
+              editorReady: ready, taskLockedByOther: Boolean(status && status.lockedByOther),
+            })}
             onSourceCaseUpdated={this.handleSourceCaseUpdated}
+            onSourceCaseLockChanged={this.handleSourceCaseLockChanged}
             onSourceEditDenied={this.handleSourceEditDenied}
             tags={['前置条件', '执行步骤', '预期结果']}
             iscore={iscore}

@@ -43,6 +43,7 @@ const LinkModal = (props) => {
             rules: [{ max: 200, message: '提示文本最多 200 字' }],
           })(
             <Input
+              className="mindmap-caption-input"
               maxLength={200}
               placeholder="选填：鼠标在链接上悬停时提示的文本"
               onChange={event => setTitleLength(event.target.value.length)}

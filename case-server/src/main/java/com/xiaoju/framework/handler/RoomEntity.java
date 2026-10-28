@@ -47,7 +47,7 @@ public class RoomEntity {
 
     public synchronized boolean addClient(SocketIOClient client) {
         if (this.clientMap.containsKey(client.getSessionId())) return false;
-        if (this.lockClient == null && (this.clientMap.isEmpty() || isSourceTaskClient(client))) this.lockClient = client;
+        if (this.lockClient == null && (this.clientMap.isEmpty() || isSourceTaskClient(client))) clientLock(client);
         this.clientMap.put(client.getSessionId(), client.getHandshakeData().getSingleUrlParam("user"));
         LOGGER.info("add client, current user number: {}", this.clientMap.size());
         return true;
@@ -149,7 +149,9 @@ public class RoomEntity {
     }
 
     public synchronized void clientLock(SocketIOClient client) {
+        boolean changed = this.lockClient == null;
         this.lockClient = client;
+        if (changed) notifySourceLockChanged(true);
     }
 
     public boolean lockByClient(SocketIOClient client) {
@@ -158,7 +160,16 @@ public class RoomEntity {
 
 
     public synchronized void clientUnlock() {
+        boolean changed = this.lockClient != null;
         this.lockClient = null;
+        if (changed) notifySourceLockChanged(false);
+    }
+
+    private void notifySourceLockChanged(boolean locked) {
+        // RecordEntity继承相同锁方法，但任务锁不能伪装成源用例锁。
+        if (!(this instanceof RecordEntity) && sourceCaseUpdateNotifier != null) {
+            sourceCaseUpdateNotifier.notifyLockChanged(caseId, locked);
+        }
     }
 
     public void lock() {

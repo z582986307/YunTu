@@ -24,4 +24,15 @@ public class SourceCaseUpdateNotifier {
             }
         }
     }
+
+    public void notifyLockChanged(Long caseId, boolean locked) {
+        for (RecordEntity room : RecordFactory.roomsForCase(caseId)) {
+            try {
+                server.getRoomOperations(room.getRoomId()).sendEvent("source_case_lock_event",
+                        PushMessage.builder().message(Boolean.toString(locked)).build());
+            } catch (RuntimeException error) {
+                LOGGER.warn("源用例锁通知发送失败，任务重新连接时将检查锁状态");
+            }
+        }
+    }
 }

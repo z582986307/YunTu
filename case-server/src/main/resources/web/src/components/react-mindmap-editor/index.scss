@@ -1,4 +1,18 @@
 @import './toolControl';
+.yuntu-modal .mindmap-caption-input .ant-input {
+  padding-right: 76px !important;
+}
+.yuntu-modal .link-title-remaining {
+  display: inline-block;
+  min-width: 56px;
+  white-space: nowrap;
+  text-align: right;
+  color: #94a3b8;
+  font-size: 12px;
+}
+.kityminder-tools-tab:not(.collapsed) {
+  border-bottom: 1px solid #e2e8f0;
+}
 // * {
 //   touch-action: none;
 // }
@@ -427,21 +441,43 @@
   font-size: 12px;
   line-height: 20px;
 }
-.mindmap-tag-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 360px; padding: 0; }
-.mindmap-tag-hint { flex-basis: 100%; }
-.mindmap-tag-list { display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%; max-height: 78px; overflow: auto; }
+.mindmap-tag-actions { display: grid; grid-template-rows: 24px auto; align-content: start; gap: 8px; width: 360px; max-width: 100%; padding: 0; }
+.mindmap-tag-heading { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.mindmap-tag-hint { line-height: 24px; }
+.mindmap-tag-controls { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.mindmap-tag-list { display: contents; }
 .mindmap-tool-tag.ant-tag {
   @include mindmap-tool-surface;
   display: inline-flex;
+  position: relative;
   align-items: center;
   gap: 4px;
   max-width: 100%;
   margin: 0;
-  padding: 0 8px;
+  padding: 0 10px;
   &:hover, &:focus-within, &.is-selected { @include mindmap-tool-active; }
   &[aria-disabled='true'], &[aria-disabled='true']:hover { @include mindmap-tool-disabled; }
-  .anticon-close { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 24px; margin: 0; color: #64748b; }
-  .anticon-close:hover { color: #ef4444; }
+  &:hover .mindmap-tag-remove:not(:disabled), &:focus-within .mindmap-tag-remove:not(:disabled) { opacity: 1; pointer-events: auto; }
+}
+.mindmap-tag-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  color: #fff;
+  background: #f53f3f;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  .anticon { margin: 0; font-size: 9px; }
+  &:focus-visible { opacity: 1; outline: 2px solid #a9c8ff; outline-offset: 2px; }
 }
 .mindmap-tag-input.ant-input {
   @include mindmap-tool-surface;
@@ -471,14 +507,28 @@
   &:hover, &:active, &:focus, &[aria-pressed='true'] { @include mindmap-tool-active; }
   &[disabled], &[disabled]:hover, &[disabled]:focus { @include mindmap-tool-disabled; }
 }
-.mindmap-font-group { display: flex; flex-direction: column; gap: 6px; padding: 0 8px; }
-.mindmap-mark-group { gap: 6px; }
-.mindmap-media-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 8px; }
+.mindmap-appearance-toolbar { align-items: flex-start; gap: 12px; row-gap: 12px; padding: 0 8px 8px; }
+.mindmap-appearance-group { display: grid; grid-template-rows: 24px auto; align-content: start; gap: 8px; min-width: 0; padding: 0; }
+.mindmap-appearance-heading { height: 24px; line-height: 24px; }
+.mindmap-appearance-toolbar .mindmap-appearance-theme { margin: 0; }
+.mindmap-appearance-toolbar .mindmap-appearance-theme .ant-select-selection,
+.mindmap-appearance-toolbar .mindmap-appearance-template .ant-select-selection { height: 32px; }
+.mindmap-appearance-toolbar .mindmap-appearance-theme .ant-select-selection__rendered,
+.mindmap-appearance-toolbar .mindmap-appearance-template .ant-select-selection__rendered { line-height: 30px; }
+.mindmap-font-group { width: 156px; }
+.mindmap-font-actions { display: grid; grid-template-columns: repeat(5, 28px); gap: 4px; align-items: start; }
+.mindmap-font-actions .color-wrapper { display: inline-flex; position: relative; }
+.mindmap-font-actions .ant-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 32px; padding: 0; }
+.mindmap-media-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; padding: 0; }
 .kityminder-tools-tab .ant-tabs-extra-content { gap: 8px; }
 @media (max-width: 1100px) {
   .kityminder-tools-tab .ant-tabs-extra-content { flex-wrap: wrap; justify-content: flex-end; row-gap: 8px; }
-  .mindmap-mark-group { padding-top: 6px; padding-bottom: 6px; }
+  .mindmap-mark-group { padding: 0; }
 }
+.km-resource-badge .km-resource-remove { opacity: 0; pointer-events: none; }
+.km-resource-badge:hover .km-resource-remove,
+.km-resource-badge:focus-within .km-resource-remove { opacity: 1; pointer-events: auto; }
+.kityminder-editor-container[data-resource-editable='false'] .km-resource-remove { display: none; }
 .yuntu-lock-wrap {
   display: inline-flex;
   align-items: center;

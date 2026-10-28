@@ -109,7 +109,7 @@ const ImageModal = (props) => {
           {getFieldDecorator('title', {
             initialValue: defaultObj.title,
             rules: [{ max: 200, message: '提示文本最多 200 字' }],
-          })(<Input maxLength={200} placeholder="选填：鼠标在图片上悬停时提示的文本"
+          })(<Input className="mindmap-caption-input" maxLength={200} placeholder="选填：鼠标在图片上悬停时提示的文本"
             onChange={event => setTitleLength(event.target.value.length)}
             suffix={<span className="link-title-remaining">{Math.max(0, 200 - titleLength)}/200</span>} />)}
         </Form.Item>

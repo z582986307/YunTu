@@ -145,6 +145,7 @@ public class SocketIOServiceImpl implements SocketIOService {
                     if (!recordEntity.addClient(client)) return;
                     clientRoomMap.put(client, recordEntity);
                     client.joinRoom(roomId);
+                    sendInitialSourceLock(client, clientEntity.getCaseId());
                     LOGGER.info("add record client room map size: " + clientRoomMap.keySet().size());
                     executorEgressService.submit(new AckEgressTask("open_event",
                             PushMessage.builder().message(recordEntity.getCaseContent()).build(), client));
@@ -327,6 +328,21 @@ public class SocketIOServiceImpl implements SocketIOService {
         }
     }
 
+
+    private void sendInitialSourceLock(SocketIOClient client, Long caseId) {
+        RoomEntity source = RoomFactory.findExistingSourceRoom(caseId);
+        if (source == null) {
+            client.sendEvent("source_case_lock_event", PushMessage.builder().message("false").build());
+            // 首次查询与发送之间可能刚建立源房间；补读避免旧false覆盖已发出的加锁广播。
+            source = RoomFactory.findExistingSourceRoom(caseId);
+        }
+        if (source != null) {
+            synchronized (source) {
+                client.sendEvent("source_case_lock_event",
+                        PushMessage.builder().message(Boolean.toString(source.isLockedByClient())).build());
+            }
+        }
+    }
 
     private ClientEntity getRoomFromClient(SocketIOClient client) {
         ClientEntity clientEntity = new ClientEntity();

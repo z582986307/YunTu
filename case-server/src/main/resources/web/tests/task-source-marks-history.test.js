@@ -12,6 +12,34 @@ const synchronousState = instance => {
   return instance;
 };
 
+test('普通源用例撤销和重做先等待编辑上传确认，任务只读执行不采用源历史屏障', async () => {
+  const order = [];
+  let release;
+  const minder = { exportJson: () => ({ base: 3, root: { data: { resource: ['synthetic-tag'] } } }),
+    applyPatches: () => { order.push('apply'); } };
+  const group = synchronousState(new DoGroup({ minder, readOnly: false, sourceEditing: false,
+    beginSourceHistory: () => { order.push('prepare'); return new Promise(resolve => { release = resolve; }); },
+    wsInstance: { sendMessage: () => { order.push('send'); } } }));
+  group.state.undoDiffs = [[{ op: 'remove', path: '/root/data/resource' }]];
+  const pending = group.undo({});
+  expect(order).toEqual(['prepare']);
+  release(true);
+  await pending;
+  expect(order).toEqual(['prepare', 'send', 'apply']);
+  order.length = 0;
+  group.state.redoDiffs = [[{ op: 'add', path: '/root/data/resource', value: ['synthetic-tag'] }]];
+  const redo = group.redo({});
+  expect(order).toEqual(['prepare']);
+  release(true);
+  await redo;
+  expect(order).toEqual(['prepare', 'send', 'apply']);
+  order.length = 0;
+  group.props = { ...group.props, readOnly: true };
+  group.state.undoDiffs = [[{ op: 'remove', path: '/root/data/resource' }]];
+  await group.undo({});
+  expect(order).toEqual(['send', 'apply']);
+});
+
 test('撤销最后一次修改后源版本确认只同步快照 base，不创建伪历史或访问空栈', async () => {
   let data = { base: 1, root: { data: { id: 'r', text: 'before' }, children: [] } };
   const minder = { exportJson: () => JSON.parse(JSON.stringify(data)),

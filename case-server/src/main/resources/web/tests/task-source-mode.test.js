@@ -1,6 +1,7 @@
 /* eslint-env jest */
 import CaseMgt from '../src/components/case/casemgt';
 import YunTuEditor from '../src/components/react-mindmap-editor';
+import { Button, Tooltip } from 'antd';
 
 jest.mock('../src/components/react-mindmap-editor', () => () => null);
 jest.mock('../src/utils/axios', () => jest.fn(() => Promise.resolve({ code: 200, data: { title: 'task' } })));
@@ -21,6 +22,41 @@ const findEditors = element => {
   const children = element.props && element.props.children;
   return [element.type === YunTuEditor ? element : null, ...[].concat(children || []).reduce((list, child) => list.concat(findEditors(child)), [])].filter(Boolean);
 };
+const findElement = (element, predicate) => {
+  if (!element || typeof element !== 'object') return null;
+  if (predicate(element)) return element;
+  const children = [].concat((element.props && element.props.children) || []);
+  return children.reduce((found, child) => found || findElement(child, predicate), null);
+};
+
+test('源锁与任务他人锁均阻止进入源编辑并显示准确悬浮提示，自己任务锁不误禁用', async () => {
+  const p = page();
+  p.state.editorReady = true;
+  p.handleSourceCaseLockChanged(true);
+  let button = findElement(p.render(), item => item.type === Button && item.props.className === 'mindmap-tool-button case-source-edit-button');
+  expect(button.props.disabled).toBe(true);
+  const tooltip = findElement(p.render(), item => item.type === Tooltip && item.props.title === '源用例被锁定，不可编辑');
+  expect(tooltip.props.children.type).toBe('span');
+  await p.enterSourceEditing();
+  expect(p.state.sourceEditing).toBe(false);
+  p.handleSourceCaseLockChanged(false);
+  const editor = findEditors(p.render())[0];
+  editor.props.onOperationStateChanged(false, { lockedByOther: true });
+  button = findElement(p.render(), item => item.type === Button && item.props.className === 'mindmap-tool-button case-source-edit-button');
+  expect(button.props.disabled).toBe(true);
+  expect(findElement(p.render(), item => item.type === Tooltip && item.props.title === '源用例被锁定，不可编辑')).not.toBeNull();
+  editor.props.onOperationStateChanged(true, { lockedByOther: false });
+  button = findElement(p.render(), item => item.type === Button && item.props.className === 'mindmap-tool-button case-source-edit-button');
+  expect(button.props.disabled).toBe(false);
+});
+
+test('已进入源编辑后自己的源锁不禁用结束编辑', () => {
+  const p = page();
+  p.state = { ...p.state, sourceEditing: true, editorReady: true };
+  p.handleSourceCaseLockChanged(true);
+  const button = findElement(p.render(), item => item.type === Button && item.props.className === 'mindmap-tool-button case-source-edit-button');
+  expect(button.props.disabled).toBe(false);
+});
 
 test('进入源编辑必须等待真实保存成功，且始终只有一个不同 key 的编辑器', async () => {
   const p = page();

@@ -46,7 +46,8 @@ public class UndoIngressTask extends IngressTask {
             ArrayNode patch = (ArrayNode) jsonMapper.readTree(data.getMessage());
             JsonNode roomContent = jsonMapper.readTree(previousContent);
             int nextVersion = roomContent.path("base").asInt() + 1;
-            boolean sourceEditing = RoomEntity.isSourceTaskClient(client);
+            // 源用例历史改变内容但不能回退持久化版本；任务执行房间沿用原契约。
+            boolean sourceEditing = !(room instanceof RecordEntity);
             ArrayNode normalized = patch;
             if (sourceEditing) {
                 normalized = FACTORY.arrayNode();

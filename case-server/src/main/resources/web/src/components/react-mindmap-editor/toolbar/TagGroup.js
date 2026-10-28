@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { Tag, Input, Button, Icon, message } from 'antd';
+import { Input, Button, Icon, message } from 'antd';
 import { runInSlices } from '../progressiveRender';
 
 const cleanTags = values => Array.from(new Set((Array.isArray(values) ? values : [])
@@ -84,27 +84,37 @@ class TagGroup extends Component {
     this.props.minder.execCommand('Resource', resource.length ? resource : null);
     this.updateSelection();
   };
+  onClear = () => {
+    if (this.disabled()) return;
+    this.props.minder.execCommand('Resource', null);
+    this.updateSelection();
+  };
   render() {
     const { selectedResource, availableTags, newTags, inputVisible, inputValue } = this.state;
     const disabled = this.disabled();
     const tags = cleanTags([...(this.props.tags || []), ...availableTags, ...newTags, ...selectedResource]);
     return <div className="nodes-actions mindmap-tag-actions">
-      <span className="mindmap-tag-hint">点击应用；已选标签可移除</span>
+      <div className="mindmap-tag-heading mindmap-appearance-heading">
+        <span className="mindmap-group-label">标签</span><span className="mindmap-tag-hint">（点击应用；已选标签可移除）</span>
+      </div>
+      <div className="mindmap-tag-controls">
       <div className="mindmap-tag-list">
-        {tags.map(tag => <Tag key={tag}
-          className={`mindmap-tool-tag${selectedResource.includes(tag) ? ' is-selected' : ''}`}
-          aria-disabled={disabled}
-          closable={!disabled && (selectedResource.includes(tag) || newTags.includes(tag))}
-          onClose={event => {
-            event.preventDefault();
-            if (selectedResource.includes(tag)) this.onRemove(tag);
-            else this.setState({ newTags: newTags.filter(value => value !== tag) });
-          }}>
+        {tags.map(tag => <span key={tag}
+          className={`ant-tag mindmap-tool-tag${selectedResource.includes(tag) ? ' is-selected' : ''}`}
+          aria-disabled={disabled}>
           <button type="button" disabled={disabled} className="mindmap-tag-button"
             title={tag}
             aria-label={`${selectedResource.includes(tag) ? '已应用标签' : '应用标签'}：${tag}`}
             aria-pressed={selectedResource.includes(tag)} onClick={() => this.onAdd(tag)}>{tag}</button>
-        </Tag>)}
+          <button type="button" className="mindmap-tag-remove" aria-label={`清除标签：${tag}`} title={`清除标签：${tag}`}
+            disabled={disabled || !(selectedResource.includes(tag) || newTags.includes(tag))}
+            onClick={event => {
+              event.stopPropagation();
+              if (this.disabled()) return;
+              if (selectedResource.includes(tag)) this.onRemove(tag);
+              else this.setState({ newTags: newTags.filter(value => value !== tag) });
+            }}><Icon type="close" /></button>
+        </span>)}
       </div>
       {inputVisible ? <Input ref={input => { this.input = input; }} size="small" value={inputValue}
         className="mindmap-tag-input"
@@ -115,6 +125,9 @@ class TagGroup extends Component {
         onCompositionEnd={() => { this.composing = false; this.pendingImeEnter = true; }}
         onPressEnter={this.handleInputConfirm} disabled={disabled} /> :
         <Button type="link" className="mindmap-tool-button mindmap-tag-add" size="small" disabled={disabled} onClick={this.showInput}><Icon type="plus" />添加标签</Button>}
+      <Button type="link" className="mindmap-tool-button mindmap-tag-clear" size="small"
+        aria-label="清除当前节点标签" disabled={disabled || !selectedResource.length} onClick={this.onClear}>清除</Button>
+      </div>
     </div>;
   }
 }

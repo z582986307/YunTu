@@ -18,6 +18,22 @@ const makeSocket = (query = { recordId: 'undefined', sourceTaskId: '2' }) => {
   return { component, socket, callbacks, imported };
 };
 
+test('源锁事件仅传布尔状态，不更改当前任务锁或内容，卸载后忽略', () => {
+  const f = makeSocket({ recordId: '2' });
+  const values = [];
+  f.component.props.onSourceCaseLockChanged = value => values.push(value);
+  f.component.props.handleLock = jest.fn();
+  expect(typeof f.callbacks.source_case_lock_event).toBe('function');
+  f.callbacks.source_case_lock_event({ message: 'true' });
+  f.callbacks.source_case_lock_event({ message: 'false' });
+  f.callbacks.source_case_lock_event({ message: 'invalid' });
+  f.component.unmounted = true;
+  f.callbacks.source_case_lock_event({ message: 'true' });
+  expect(values).toEqual([true, false]);
+  expect(f.component.props.handleLock).not.toHaveBeenCalled();
+  expect(f.imported).toEqual([]);
+});
+
 test('源任务模式不能恢复旧正文缓存，导入完成回调使用最新服务端内容', async () => {
   const f = makeSocket();
   const cache = JSON.stringify(f.component.props.wsParam);

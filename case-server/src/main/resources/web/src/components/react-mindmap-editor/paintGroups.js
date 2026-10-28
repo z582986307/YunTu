@@ -153,12 +153,14 @@ export const createPaintGroups = minder => {
   return {
     getBounds() {
       const bounds = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
-      groups.forEach(entry => {
-        if (!entry.nodes.length) return;
-        bounds.left = Math.min(bounds.left, entry.box.left);
-        bounds.top = Math.min(bounds.top, entry.box.top);
-        bounds.right = Math.max(bounds.right, entry.box.right);
-        bounds.bottom = Math.max(bounds.bottom, entry.box.bottom);
+      // 绘制分组可能不含导入后新增节点；滚动范围读取当前完整树的可见布局。
+      minder.getRoot().traverse(node => {
+        if (!node.attached || (node.parent && !node.parent.isExpanded())) return;
+        const box = node.getLayoutBox();
+        bounds.left = Math.min(bounds.left, box.left - 24);
+        bounds.top = Math.min(bounds.top, box.top - 24);
+        bounds.right = Math.max(bounds.right, box.right + 24);
+        bounds.bottom = Math.max(bounds.bottom, box.bottom + 24);
       });
       return Number.isFinite(bounds.left) ? bounds : null;
     },

@@ -55,7 +55,8 @@ class DoGroup extends Component {
       }
       lastSnap = headSnap;
       this.setState({ undoDiffs, lastSnap });
-      return { changed: true, snapshot: headSnap };
+      // 服务端仅确认版本不是新的内容编辑，不能因此丢弃撤销后的重做历史。
+      return { changed: diff.some(operation => operation.path !== '/base'), snapshot: headSnap };
     }
     return { changed: false, snapshot: headSnap };
   };
@@ -72,7 +73,7 @@ class DoGroup extends Component {
   // 撤销
   undo = async (notifyInfo = {}) => {
     if ((this.props.isLock && notifyInfo instanceof Object) || !this.hasUndo()) return;
-    if (this.props.sourceEditing && notifyInfo instanceof Object &&
+    if ((this.props.sourceEditing || !this.props.readOnly) && this.props.beginSourceHistory && notifyInfo instanceof Object &&
         !(await this.props.beginSourceHistory())) return;
     if (this.unmounted) return;
     this.notifyInfo = notifyInfo;
@@ -99,7 +100,7 @@ class DoGroup extends Component {
   // 重做
   redo = async (notifyInfo = {}) => {
     if ((this.props.isLock && notifyInfo instanceof Object) || !this.hasRedo()) return;
-    if (this.props.sourceEditing && notifyInfo instanceof Object &&
+    if ((this.props.sourceEditing || !this.props.readOnly) && this.props.beginSourceHistory && notifyInfo instanceof Object &&
         !(await this.props.beginSourceHistory())) return;
     if (this.unmounted) return;
     this.notifyInfo = notifyInfo;

@@ -2822,7 +2822,11 @@
             if (data) {
               field = path.shift();
               if (patch.op == 'remove') {
-                data[field] = null
+                if (Array.isArray(data)) {
+                  data.splice(Number(field), 1);
+                } else {
+                  delete data[field];
+                }
               } else {
                 data[field] = patch.value;
               }
@@ -5606,8 +5610,8 @@
               }
               this.count.setContent(node._collapsedLeafCount > 99 ? '...' : String(node._collapsedLeafCount));
               this.count.setVisible(true);
-              this.radius = 10;
-              this.outline.setRadius(10);
+              this.radius = 8;
+              this.outline.setRadius(8);
             } else {
               this.count.setVisible(false);
               this.radius = 6;
@@ -5966,7 +5970,7 @@
               var remove = new kity.Group();
               remove.addShape(new kity.Circle(7).fill('#f5222d').stroke('#ffffff', 1));
               remove.addShape(new kity.Path().setPathData('M-2.5,-2.5L2.5,2.5M2.5,-2.5L-2.5,2.5').stroke('#ffffff', 1.5));
-              remove.setTranslate(20, -4);
+              remove.setTranslate(23, -7);
               remove.setStyle('cursor', 'pointer');
               remove.node.setAttribute('aria-label', '删除链接');
               remove.node.setAttribute('data-link-remove', 'true');
@@ -7241,7 +7245,7 @@
             for (var i = 0; i < nodes.length; i++) {
               nodes[i].setData(PROGRESS_DATA, value || null).render();
             }
-            if (!km._largeMindMap) km.layout();
+            // 结果图标不参与节点占位，纯状态变更无需重排整图。
           },
           queryValue: function (km) {
             var nodes = km.getSelectedNodes();
@@ -7527,7 +7531,12 @@
               resource = [resource];
             }
             nodes.forEach(function (node) {
-              node.setData('resource', resource).render();
+              if (resource == null || (Array.isArray(resource) && resource.length === 0)) {
+                delete node.data.resource;
+              } else {
+                node.setData('resource', Array.isArray(resource) ? resource.slice() : resource);
+              }
+              node.render();
             });
             minder.layout(200);
           },
@@ -7562,6 +7571,40 @@
             rect = this.rect = new kity.Rect().setRadius(4);
             text = this.text = new kity.Text().setFontSize(12).setVerticalAlign('middle');
             this.addShapes([rect, text]);
+            this.node.classList.add('km-resource-badge');
+            this.node.setAttribute('tabindex', '0');
+            var overlay = this;
+            var ensureRemoveButton = function () {
+            if (overlay.removeButton || !overlay.resourceTarget || overlay.resourceTarget.minder._resourceEditable === false) return;
+            var remove = overlay.removeButton = new kity.Group();
+            remove.node.classList.add('km-resource-remove');
+            remove.node.setAttribute('data-resource-remove', 'true');
+            remove.node.setAttribute('role', 'button');
+            remove.node.setAttribute('tabindex', '0');
+            remove.addShape(new kity.Circle(7).fill('#f53f3f').stroke('#ffffff', 1));
+            remove.addShape(new kity.Path().setPathData('M-2.5,-2.5L2.5,2.5M2.5,-2.5L-2.5,2.5').stroke('#ffffff', 1.5));
+            remove.setStyle('cursor', 'pointer');
+            overlay.addShape(remove);
+            remove.setTranslate(overlay.width - 1, overlay.removeY);
+            remove.node.setAttribute('aria-label', '清除标签：' + overlay.resourceTarget.resource);
+            var stop = function (event) { event.preventDefault(); event.stopPropagation(); };
+            var activate = function (event) {
+              stop(event);
+              var target = overlay.resourceTarget;
+              if (target && target.minder._resourceEditable !== false) {
+                target.minder.fire('resourceremoverequest', { node: target.node, resource: target.resource });
+              }
+            };
+            remove.node.addEventListener('mousedown', stop);
+            remove.node.addEventListener('mouseup', stop);
+            remove.node.addEventListener('dblclick', stop);
+            remove.node.addEventListener('click', activate);
+            remove.node.addEventListener('keydown', function (event) {
+              if (event.key === 'Enter' || event.key === ' ') activate(event);
+            });
+            };
+            this.node.addEventListener('mouseenter', ensureRemoveButton);
+            this.node.addEventListener('focus', ensureRemoveButton);
           },
           setValue: function (resourceName, color) {
             var paddingX = 8,
@@ -7582,8 +7625,14 @@
             rect.setPosition(0, box.y - paddingY);
             this.width = Math.round(box.width + paddingX * 2);
             this.height = Math.round(box.height + paddingY * 2);
-            rect.setSize(this.width, this.height);
+            rect.setSize(this.width, this.height).setRadius(borderRadius);
             rect.fill(color);
+            this.removeY = box.y - paddingY + 1;
+            this.node.setAttribute('aria-label', '标签：' + resourceName);
+            if (this.removeButton) {
+              this.removeButton.setTranslate(this.width - 1, this.removeY);
+              this.removeButton.node.setAttribute('aria-label', '清除标签：' + resourceName);
+            }
           },
         });
         /**
@@ -7623,6 +7672,7 @@
                 container.addShape(overlay);
               }
               overlay.setVisible(true);
+              overlay.resourceTarget = { minder: minder, node: node, resource: resource[i] };
               overlay.setValue(resource[i], minder.getResourceColor(resource[i]));
               overlay.setTranslate(x, -1);
               x += overlay.width;

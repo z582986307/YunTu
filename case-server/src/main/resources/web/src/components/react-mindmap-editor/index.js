@@ -193,12 +193,13 @@ class KityminderEditor extends Component {
   };
   notifyOperationState = () => {
     this.syncInputOwnership();
-    if (this.props.onOperationStateChanged) this.props.onOperationStateChanged(this.canOperate());
+    if (this.props.onOperationStateChanged) this.props.onOperationStateChanged(this.canOperate(), { lockedByOther: Boolean(this.state.isLock) });
   };
   syncInputOwnership = () => {
     document.removeEventListener('keydown', this.handleKeyDown);
     if (this.canOperate()) document.addEventListener('keydown', this.handleKeyDown);
     const ownsClipboard = this.canEditContent();
+    if (this.minder) this.minder._resourceEditable = ownsClipboard;
     if (ownsClipboard === this.ownsClipboard) return;
     clipboardRuntime.removeListener();
     this.ownsClipboard = ownsClipboard;
@@ -389,8 +390,19 @@ class KityminderEditor extends Component {
     });
 
     minder.on('contentchange', this.sendPatch);
+    minder.on('resourceremoverequest', this.handleResourceRemove);
     minder.on('noderender', event => this.decorateAssignedNode(event.node));
     if (!readOnly) minder.on('mousemove', this.handleImageHover);
+  };
+  handleResourceRemove = event => {
+    if (!this.canEditContent() || !event || !event.node) return;
+    const node = event.node;
+    if (this.minder.getNodeById(node.getData('id')) !== node) return;
+    const resources = node.getData('resource');
+    if (!Array.isArray(resources) || !resources.includes(event.resource)) return;
+    const remaining = resources.filter(value => value !== event.resource);
+    this.minder.select(node, true);
+    this.minder.execCommand('Resource', remaining.length ? remaining : null);
   };
   centerImportedMap = () => {
     const { minder } = this;
@@ -1476,7 +1488,7 @@ class KityminderEditor extends Component {
       registerPendingInput: this.registerPendingInput,
     };
 
-    const tabContentClass = `toolbar has-right-border`;
+    const tabContentClass = `toolbar mindmap-appearance-toolbar`;
 
     return (
       <ConfigProvider locale={zhCN}>
@@ -1484,6 +1496,7 @@ class KityminderEditor extends Component {
           className={`kityminder-editor-container${
             fullScreen ? ' full-screen' : ''
           }`}
+          data-resource-editable={this.canEditContent() ? 'true' : 'false'}
           ref={node => (this.editorContainer = node)}
           style={editorStyle}
         >
@@ -1491,6 +1504,7 @@ class KityminderEditor extends Component {
             <Socket
               url={wsUrl}
               wsParam={wsParam}
+              onSourceCaseLockChanged={this.props.onSourceCaseLockChanged}
               onOpen={this.handleWsOpen}
               onMessage={this.handleWsData}
               onClose={this.handleWsClose}
@@ -1637,12 +1651,12 @@ class KityminderEditor extends Component {
             >
               <TabPane tab={null} key={type !== 'compare' ? '2' : '1'}>
                 {type !== 'compare' && <div className={tabContentClass}>
-                  <ThemeGroup {...childProps} />
-                  <TemplateGroup {...childProps} />
+                  <div className="mindmap-appearance-group"><div className="mindmap-appearance-heading" aria-hidden="true" /><ThemeGroup {...childProps} /></div>
+                  <div className="mindmap-appearance-group"><div className="mindmap-appearance-heading" aria-hidden="true" /><TemplateGroup {...childProps} /></div>
                   <FontGroup {...childProps} />
-                  <div className="mindmap-mark-group"><span className="mindmap-group-label">优先级</span><PriorityGroup {...childProps} /></div>
-                  <div className="mindmap-mark-group"><span className="mindmap-group-label">标签</span><TagGroup {...childProps} /></div>
-                  {!readOnly && <MediaGroup {...childProps} toolbar={{ ...this.props.toolbar, addFactor: false }} />}
+                  <div className="mindmap-appearance-group mindmap-mark-group"><span className="mindmap-group-label mindmap-appearance-heading">优先级</span><PriorityGroup {...childProps} /></div>
+                  <TagGroup {...childProps} />
+                  {!readOnly && <div className="mindmap-appearance-group"><div className="mindmap-appearance-heading" aria-hidden="true" /><MediaGroup {...childProps} toolbar={{ ...this.props.toolbar, addFactor: false }} /></div>}
                 </div>}
               </TabPane>
             </Tabs>
@@ -1764,17 +1778,6 @@ class KityminderEditor extends Component {
                 wsInstance={this.ws}
                 beginSourceHistory={this.beginSourceHistory}
               />
-              {!readOnly && (
-                <Tooltip title="插入图片">
-                  <Button
-                    type="link"
-                    icon="picture"
-                    aria-label="插入图片"
-                    disabled={!selectedNode || isLock}
-                    onClick={() => this.setState({ showEditImage: true })}
-                  >插入图片</Button>
-                </Tooltip>
-              )}
             </div>
           )}
           {this.state.showEditImage && (

@@ -1,0 +1,35 @@
+<!doctype html>
+<meta charset="utf-8">
+<script src="../../node_modules/kity/dist/kity.js"></script>
+<script src="../../src/components/react-mindmap-editor/assets/kityminder-core/kityminder.core.js"></script>
+<div id="canvas" style="width:1000px;height:650px"></div><pre id="result" data-status="running">运行中</pre>
+<script>
+(async function () {
+  var minder, output = document.getElementById('result'), results = [];
+  function check(ok, name) { if (!ok) throw new Error(name); results.push('PASS: ' + name); }
+  try {
+    minder = new window.kityminder.Minder({ renderTo: document.getElementById('canvas'), layoutAnimationDuration: 0 });
+    minder.importJson({ root: { data: { id: 'r', text: 'synthetic-root' }, children: [
+      { data: { id: 'a', text: 'synthetic-a', resource: ['标签甲', '标签乙'] } },
+      { data: { id: 'b', text: 'synthetic-b', resource: ['标签丙'] } }
+    ] } });
+    var a = minder.getNodeById('a'), b = minder.getNodeById('b');
+    var renderer = a.getRenderer('ResourceRenderer'), first = renderer.overlays[0];
+    var radius = first.rect.getRadius();
+    check((Array.isArray(radius) ? radius.every(function (value) { return value > 0; }) : radius > 0), '标签实际SVG圆角在setSize后仍大于0');
+    check(!document.querySelector('[data-resource-remove]'), '未悬浮时不为大量标签创建额外清除SVG');
+    first.node.dispatchEvent(new MouseEvent('mouseenter'));
+    var remove = first.node.querySelector('[data-resource-remove]');
+    check(Boolean(remove), '每个SVG标签都有独立右上角清除按钮');
+    var seen;
+    minder.on('resourceremoverequest', function (event) { seen = event; });
+    minder.select(b, true);
+    remove.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    check(seen && seen.node === a && seen.resource === '标签甲', '清除事件携带目标节点和标签而非当前选中节点');
+    check(b.getData('resource')[0] === '标签丙', '派发清除请求不会直接修改其他节点数据');
+    output.setAttribute('data-status', 'passed');
+    output.textContent = results.join('\n');
+  } catch (error) { output.setAttribute('data-status', 'failed'); output.textContent = results.join('\n') + '\nFAIL: ' + error.message; }
+  finally { if (minder) minder.destroy(); }
+}());
+</script>
