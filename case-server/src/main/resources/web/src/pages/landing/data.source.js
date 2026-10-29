@@ -11,9 +11,9 @@ export const Banner30DataSource = {
         className: 'banner3-slogan',
         children: (
           <div>
-            <img src="/favicon.svg" className="banner3-logo" alt="云图用例管理平台" />
+            <img src="/favicon.svg" className="banner3-logo" alt="YunTu" />
             <br />
-            <span>云图用例管理平台</span>
+            <span>YunTu</span>
           </div>
         ),
       },
@@ -58,7 +58,7 @@ export const Footer00DataSource = {
     children: (
       <span>
         <p>
-          <span>云图用例管理平台</span>
+          <span>YunTu</span>
         </p>
       </span>
     ),

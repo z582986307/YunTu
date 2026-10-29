@@ -62,7 +62,7 @@ class LogIn extends React.PureComponent {
       <div className="login">
         <div className="card">
           <div className="title">
-            云图用例管理平台<span>让测试用例协作更清晰</span>
+            YunTu<span>让测试用例协作更清晰</span>
           </div>
           <span
             className={type === '1' ? 'btn btn_active' : 'btn'}

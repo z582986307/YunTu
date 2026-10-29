@@ -150,7 +150,7 @@ export default {
         antd: true,
         dva: true,
         dynamicImport: { webpackChunkName: true },
-        title: 'TestCaseManage',
+        title: 'YunTu',
         dll: true,
         routes: {
           exclude: [

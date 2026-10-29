@@ -52,7 +52,7 @@ function Initialize-LocalTls {
 
 $port = if ($Stage -eq 'database') { $dbPort } else { $httpPort }
 if (Test-LocalPort $port) {
-  throw "端口 $port 已被占用。请先运行停止-Windows.bat关闭旧版云图，再重新启动。"
+  throw "端口 $port 已被占用。请先运行停止-Windows.bat关闭旧版YunTu，再重新启动。"
 }
 [IO.Directory]::CreateDirectory((Join-Path $packageRoot 'logs')) | Out-Null
 $startInfo = New-Object System.Diagnostics.ProcessStartInfo
@@ -66,7 +66,7 @@ if ($Stage -eq 'database') {
   $errorLog = Join-Path $packageRoot 'logs\database.log'
   $startInfo.Arguments = '--basedir="' + $dbRoot + '" --datadir="' + $dataRoot + '" --port=' + $dbPort + ' --bind-address=127.0.0.1 --log-error="' + $errorLog + '"'
 } else {
-  if (-not (Test-LocalPort $dbPort)) { throw "云图数据库端口 $dbPort 未就绪，应用未启动。" }
+  if (-not (Test-LocalPort $dbPort)) { throw "YunTu数据库端口 $dbPort 未就绪，应用未启动。" }
   $secretFile = Join-Path $packageRoot 'database\db-secret.txt'
   $admin = Join-Path $packageRoot 'runtime\mariadb\bin\mariadb.exe'
   if (-not (Test-Path -LiteralPath $secretFile)) {

@@ -109,8 +109,8 @@ foreach ($application in $applications) {
     Stop-Process -Id $application.Id -Force -ErrorAction Stop
     $pidFile = Join-Path $application.Root 'logs\application.pid'
     if (Test-Path -LiteralPath $pidFile) { Remove-Item -LiteralPath $pidFile -Force }
-    Write-Output "已停止云图应用进程 $($application.Id)（$($application.Name)）。"
-  } catch { $problems.Add("云图应用进程 $($application.Id) 未能停止：$($_.Exception.Message)") }
+    Write-Output "已停止YunTu应用进程 $($application.Id)。"
+  } catch { $problems.Add("YunTu应用进程 $($application.Id) 未能停止：$($_.Exception.Message)") }
 }
 
 foreach ($database in $databases) {
@@ -119,11 +119,11 @@ foreach ($database in $databases) {
     if (-not $current -or (Get-ArgumentValue $current.CommandLine '--datadir') -ne
         (Get-ArgumentValue ($processes | Where-Object ProcessId -eq $database.Id | Select-Object -First 1).CommandLine '--datadir')) { continue }
     Stop-YunTuDatabase $database
-    Write-Output "已正常关闭云图数据库进程 $($database.Id)。"
-  } catch { $problems.Add("云图数据库进程 $($database.Id) 未能正常关闭：$($_.Exception.Message)") }
+    Write-Output "已正常关闭YunTu数据库进程 $($database.Id)。"
+  } catch { $problems.Add("YunTu数据库进程 $($database.Id) 未能正常关闭：$($_.Exception.Message)") }
 }
 
-if ($applications.Count -eq 0 -and $databases.Count -eq 0) { Write-Output '未发现正在运行的云图进程。' }
+if ($applications.Count -eq 0 -and $databases.Count -eq 0) { Write-Output '未发现正在运行的YunTu进程。' }
 if ($problems.Count -gt 0) {
   $problems | ForEach-Object { [Console]::Error.WriteLine($_) }
   exit 1

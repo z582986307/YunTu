@@ -73,7 +73,7 @@ class Headers extends React.Component {
       <React.Fragment>
       <Header className={this.props.light ? 'yuntu-header-light' : ''} style={{ zIndex: 9 }}>
         <a href="/" style={{ color: this.props.light ? '#111827' : '#fff', fontSize: this.props.light ? 20 : 24 }}>
-          云图用例管理平台
+          YunTu
         </a>
         {getCookies('username') ? (
           <Dropdown overlay={menu} overlayClassName="dropStyle" placement="bottomLeft">
