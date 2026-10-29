@@ -30,7 +30,7 @@ const setup = () => {
   editor.scheduleNewNodeInput = () => {};
   let group;
   act(() => { ReactDOM.render(<TagGroup ref={value => { group = value; }} minder={minder} tags={[]} />, holder); });
-  act(() => { holder.querySelector('button').click(); });
+  act(() => { holder.querySelector('.mindmap-tag-add').click(); });
   const input = holder.querySelector('input');
   act(() => { Simulate.change(input, { target: { value: 'synthetic-tag' } }); });
   // React16 的委托监听已建立，再接入脑图 document 原生监听，复现同一层级的冒泡。

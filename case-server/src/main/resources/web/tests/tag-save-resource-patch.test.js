@@ -5,6 +5,15 @@ import jsonDiff from 'fast-json-patch';
 import DoGroup from '../src/components/react-mindmap-editor/toolbar/DoGroup';
 
 const core = fs.readFileSync(path.join(__dirname, '../src/components/react-mindmap-editor/assets/kityminder-core/kityminder.core.js'), 'utf8');
+test('内置标签在命令层也不能删除，不生成删除配置', () => {
+  const start = core.indexOf('var TagCatalogCommand =');
+  const data = {};
+  const minder = { getRoot: () => ({ getData: key => data[key], setData: (key, value) => { data[key] = value; } }) };
+  for (const value of ['前置条件', '执行步骤', '预期结果']) {
+    method('execute', 'queryValue', {}, start)(minder, value, 'remove');
+    expect(data.tagCatalog).toBeUndefined();
+  }
+});
 const method = (name, next, context = {}, offset = 0) => {
   const start = core.indexOf(`${name}: function`, offset) + name.length + 2;
   const end = core.indexOf(`${next}: function`, start);
@@ -14,6 +23,24 @@ const method = (name, next, context = {}, offset = 0) => {
 const patchStart = core.indexOf('function applyPatch(minder, patch)');
 const patchEnd = core.indexOf('kity.extendClass(Minder, {', patchStart);
 const applyPatch = Function(`return (${core.slice(patchStart, patchEnd).trim()});`)();
+test('优先级渲染失败时恢复暂存显示标记，避免节点永久隐藏', () => {
+  const data = {}, node = { data, setData: (key, value) => { data[key] = value; }, render: () => { throw new Error('synthetic-render-failure'); } };
+  const minder = { getSelectedNodes: () => [node], layout: () => {}, _recoverExpandLayout() {
+    this._expandLayoutPending = false; node._expandRevealPending = false;
+  } };
+  const execute = method('execute', 'queryValue', { PRIORITY_DATA: 'priority' }, core.indexOf('var PriorityCommand ='));
+  expect(() => execute(minder, 1)).toThrow('synthetic-render-failure');
+  expect(minder._expandLayoutPending).toBe(false);
+  expect(node._expandRevealPending).toBe(false);
+});
+test('历史与远端优先级补丁在渲染前进入最终布局事务', () => {
+  const observed = [];
+  const node = { data: {}, render() { observed.push([minder._expandLayoutPending, this._expandRevealPending]); } };
+  const minder = { getRoot: () => node, layout: () => {}, fire: () => {} };
+  applyPatch(minder, { op: 'add', path: '/root/data/priority', value: 2 });
+  expect(node.data.priority).toBe(2);
+  expect(observed).toEqual([[true, true]]);
+});
 const clone = value => JSON.parse(JSON.stringify(value));
 
 // 运行实际 importJson/importNode/exportJson/Resource.execute/applyPatch 方法，

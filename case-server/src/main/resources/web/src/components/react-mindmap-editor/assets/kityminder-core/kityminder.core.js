@@ -2858,12 +2858,22 @@
             }
             // 根候选配置是非视觉数据；历史/远端补丁不应为它重绘或重排整图。
             if (patch.node === minder.getRoot() && patch.dataPath[0] === 'tagCatalog') break;
+            var priorityLayout = patch.dataPath[0] === 'priority';
+            if (priorityLayout) {
+              minder._expandLayoutPending = true;
+              node._expandRevealPending = true;
+            }
+            try {
             if (field == 'expandState') {
               node.renderTree();
             } else {
               node.render();
             }
             minder.layout();
+            } catch (error) {
+              if (priorityLayout && typeof minder._recoverExpandLayout === 'function') minder._recoverExpandLayout();
+              throw error;
+            }
         }
         minder.fire('patch', {
           patch: patch,
@@ -7132,13 +7142,23 @@
           base: Command,
           execute: function (km, value) {
             var nodes = km.getSelectedNodes();
+            if (!nodes.length) return;
+            // 图标改变内容框尺寸。复用最终矩阵提交事务，不能先在旧坐标扩宽再动画移位。
+            // 大图仍分片计算；变更节点暂缓显示，到 layoutapply 时连同连线一起恢复。
+            km._expandLayoutPending = true;
+            try {
             for (var i = 0; i < nodes.length; i++) {
+              nodes[i]._expandRevealPending = true;
               if (value) nodes[i].setData(PRIORITY_DATA, value);
               else delete nodes[i].data[PRIORITY_DATA];
               nodes[i].render();
             }
             // 大图同样需要重排；layout 会进入既有分片调度，不同步整树渲染。
             km.layout();
+            } catch (error) {
+              if (typeof km._recoverExpandLayout === 'function') km._recoverExpandLayout();
+              throw error;
+            }
           },
           queryValue: function (km) {
             var nodes = km.getSelectedNodes();
@@ -7619,6 +7639,7 @@
           execute: function (minder, value, operation) {
             if (typeof value !== 'string' || !value.trim()) return;
             value = value.trim();
+            if (operation === 'remove' && ['前置条件', '执行步骤', '预期结果'].indexOf(value) !== -1) return;
             var root = minder.getRoot();
             var catalog = root.getData('tagCatalog') || {};
             var clean = function (values) {

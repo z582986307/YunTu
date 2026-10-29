@@ -25,6 +25,21 @@ const fixture = () => {
       data[command.toLowerCase()] = Array.isArray(remaining) && !remaining.length ? null : remaining;
     } } };
 };
+test('内置标签不可删除且旧删除记录不能隐藏内置项，自定义标签仍可删除', () => {
+  const { minder, data } = fixture();
+  data.tagCatalog = { added: ['自定义'], removed: ['前置条件', '执行步骤', '预期结果'] };
+  let group;
+  act(() => { ReactDOM.render(<TagGroup ref={v => { group = v; }} minder={minder}
+    tags={['前置条件', '执行步骤', '预期结果']} />, holder); });
+  for (const tag of ['前置条件', '执行步骤', '预期结果']) {
+    expect(holder.querySelector(`[title="${tag}"]`)).not.toBeNull();
+    expect(holder.querySelector(`[aria-label="删除可用标签：${tag}"]`)).toBeNull();
+    act(() => { group.onRemove(tag); });
+  }
+  expect(data.tagCatalog.removed).toEqual(['前置条件', '执行步骤', '预期结果']);
+  act(() => { holder.querySelector('[aria-label="删除可用标签：自定义"]').click(); });
+  expect(holder.querySelector('[title="自定义"]')).toBeNull();
+});
 test('标签标题和括号说明同一标题区，应用后删除控件不再改变标签DOM占位', () => {
   const { minder, data } = fixture();
   act(() => { ReactDOM.render(<TagGroup minder={minder} tags={['甲', '乙']} />, holder); });
@@ -49,7 +64,7 @@ test('标签组清除只移除节点标签，不删除可选标签，任务只�
   act(() => { ReactDOM.render(<TagGroup minder={minder} tags={['甲', '乙']} />, holder); });
   act(() => { holder.querySelector('[aria-label="清除当前节点标签"]').click(); });
   expect(data.resource).toBeNull();
-  expect(holder.querySelectorAll('.mindmap-tool-tag').length).toBe(2);
+  expect(holder.querySelectorAll('.mindmap-tool-tag').length).toBe(5);
   act(() => { ReactDOM.render(<TagGroup minder={minder} tags={['甲', '乙']} readOnly />, holder); });
   expect([...holder.querySelectorAll('button')].every(button => button.disabled)).toBe(true);
 });

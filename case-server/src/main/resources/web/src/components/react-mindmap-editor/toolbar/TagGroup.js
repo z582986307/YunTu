@@ -4,6 +4,7 @@ import { runInSlices } from '../progressiveRender';
 
 const cleanTags = values => Array.from(new Set((Array.isArray(values) ? values : [])
   .filter(value => typeof value === 'string').map(value => value.trim()).filter(Boolean)));
+const BUILTIN_TAGS = ['前置条件', '执行步骤', '预期结果'];
 
 class TagGroup extends Component {
   state = { selectedResource: [], availableTags: [], inputVisible: false, inputValue: '' };
@@ -29,8 +30,9 @@ class TagGroup extends Component {
   getTags = () => {
     const catalog = this.props.minder.getRoot().getData('tagCatalog') || {};
     const removed = cleanTags(catalog.removed);
-    return cleanTags([...(this.props.tags || []), ...this.state.availableTags,
-      ...this.state.selectedResource, ...cleanTags(catalog.added)]).filter(tag => !removed.includes(tag));
+    return cleanTags([...BUILTIN_TAGS, ...(this.props.tags || []), ...this.state.availableTags,
+      ...this.state.selectedResource, ...cleanTags(catalog.added)])
+      .filter(tag => BUILTIN_TAGS.includes(tag) || !removed.includes(tag));
   };
   updateSelection = () => {
     if (!this.unmounted) this.setState({ selectedResource: cleanTags(this.props.minder.queryCommandValue('Resource')) });
@@ -87,7 +89,7 @@ class TagGroup extends Component {
     this.updateSelection();
   };
   onRemove = value => {
-    if (this.catalogDisabled()) return;
+    if (this.catalogDisabled() || BUILTIN_TAGS.includes(value)) return;
     this.props.minder.execCommand('TagCatalog', value, 'remove');
     this.updateSelection();
   };
@@ -114,12 +116,12 @@ class TagGroup extends Component {
             title={tag}
             aria-label={`${selectedResource.includes(tag) ? '已应用标签' : '应用标签'}：${tag}`}
             aria-pressed={selectedResource.includes(tag)} onClick={() => this.onAdd(tag)}>{tag}</button>
-          <button type="button" className="mindmap-tag-remove" aria-label={`删除可用标签：${tag}`} title={`删除可用标签：${tag}`}
+          {!BUILTIN_TAGS.includes(tag) && <button type="button" className="mindmap-tag-remove" aria-label={`删除可用标签：${tag}`} title={`删除可用标签：${tag}`}
             disabled={catalogDisabled}
             onClick={event => {
               event.stopPropagation();
               this.onRemove(tag);
-            }}><Icon type="close" /></button>
+            }}><Icon type="close" /></button>}
         </span>)}
       </div>
       {inputVisible ? <Input ref={input => { this.input = input; }} size="small" value={inputValue}
