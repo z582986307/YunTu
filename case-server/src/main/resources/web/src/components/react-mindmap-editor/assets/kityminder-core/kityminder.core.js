@@ -1972,6 +1972,17 @@
        * Minder 上的布局支持
        */
       kity.extendClass(Minder, {
+        _recoverExpandLayout: function () {
+          this._expandLayoutPending = false;
+          var affected = this.getAllNode().filter(function (node) { return node._expandRevealPending; });
+          affected.forEach(function (node) {
+            node._expandRevealPending = false;
+            if (node.rc) node.rc.node.style.visibility = '';
+          });
+          // 先清完所有临时标记，再沿真实父节点折叠状态恢复边，不能无条件显示连接线。
+          var minder = this;
+          affected.forEach(function (node) { minder.updateConnect(node); });
+        },
         layout: function () {
           if (this._scheduleLayout && !this._progressiveImporting) return this._scheduleLayout();
           // 恢复视图需等待实际末帧及 layoutallfinish，不能按动画时长猜测。
@@ -1979,6 +1990,8 @@
           // 折叠改变可见树：新显露节点不能从父节点的旧矩阵穿过兄弟节点。
           var expandLayout = this._expandLayoutPending;
           var duration = expandLayout ? 0 : this.getOption('layoutAnimationDuration');
+          var layoutFailed = false;
+          try {
           this.getRoot().traverse(function (node) {
             // clear last results
             node.setLayoutTransform(null);
@@ -2009,12 +2022,21 @@
              * @author Naixor
              */
             setTimeout(function () {
+              if (layoutFailed) return;
               try { minder.fire('layoutallfinish'); }
               finally { completion.finished = true; }
             }, 0);
           });
           if (expandLayout) this._expandLayoutPending = false;
           return this.fire('layout');
+          } catch (error) {
+            layoutFailed = true;
+            if (expandLayout) {
+              this._recoverExpandLayout();
+              this.fire('layouterror', { error: error });
+            }
+            throw error;
+          }
         },
         refresh: function () {
           this.getRoot().renderTree();

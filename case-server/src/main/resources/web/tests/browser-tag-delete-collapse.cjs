@@ -74,6 +74,10 @@ async function main() {
         width: box.width, height: box.height, tagWidth: tag.width };
     });
     await page.screenshot({ path: path.join(output, 'tag-toolbar.png') });
+    // 测试标签保持键盘聚焦，同时悬浮工具栏×，一张局部截图呈现两种实际控件。
+    await page.focus('svg [aria-label="标签：标签乙"]');
+    await page.hover(candidate);
+    await page.screenshot({ path: path.join(output, 'tag-remove-detail.png'), clip: { x: 630, y: 40, width: 620, height: 520 } });
     await page.click(candidate);
     await page.waitForSelector('[aria-label="应用标签：浏览器新增标签"]', { hidden: true });
     evidence.toolbar.removed = true;
@@ -85,7 +89,10 @@ async function main() {
         : Array.from({ length: Math.ceil(nodeCount / 100) }, (_, i) => ({ data: { id: `f${i}`, text: `背景分支${i}` },
           children: Array.from({ length: 100 }, (_, j) => ({ data: { id: `f${i}-${j}`, text: `背景节点${i}-${j}` } })) }));
       window.testEditor = await window.mountTestEditor({ template: 'right', theme: 'byte-blue', root: { data: { id: 'r', text: '根' }, children: [
-        { data: { id: 'branch', text: '折叠分支', expandState: 'collapse' }, children: Array.from({ length: 7 }, (_, i) => ({ data: { id: `c${i}`, text: `子节点${i}` } })) },
+        { data: { id: 'branch', text: '折叠分支', expandState: 'collapse' }, children: Array.from({ length: 7 }, (_, i) => ({
+          data: { id: `c${i}`, text: `子节点${i}`, expandState: i === 0 ? 'collapse' : 'expand' },
+          children: i === 0 ? [{ data: { id: 'nested-hidden', text: '保持收起的孙节点' } }] : [],
+        })) },
         { data: { id: 'sibling', text: '相邻节点' }, children: [{ data: { id: 'leaf', text: '相邻叶节点' } }] },
         ...fillers,
       ] } }, false, { width: '100%', height: '900px' });
@@ -177,24 +184,69 @@ async function main() {
       m._scheduleLayout = schedule;
       return before === JSON.stringify(snapshot());
     });
-    if (evidence.layout.progressive) {
-      evidence.failureRecovery = await page.evaluate(async () => {
+    evidence.failureRecovery = [];
+    const childExpander = await page.evaluate(() => window.testEditor.minder.getNodeById('c0').getRenderer('ExpanderRenderer').expander.node.id);
+    await page.click(`#${childExpander}`); await ready();
+    await page.click(`#${childExpander}`); await ready();
+    for (const failureSite of evidence.layout.progressive ? ['doLayout'] : ['doLayout', 'applyLayoutResult']) {
+      await page.click(`#${expander}`); // 成功收起，随后真实鼠标展开才会产生临时隐藏的节点和边。
+      await ready();
+      await page.evaluate(failureSite => {
         const m = window.testEditor.minder, branch = m.getNodeById('branch');
-        const original = branch.getLayoutInstance;
-        let failed = false;
-        branch.getLayoutInstance = () => ({ doLayout() { throw new Error('隔离夹具注入的布局失败'); } });
-        const error = new Promise(resolve => m.on('layouterror', () => resolve()));
-        branch.collapse(); branch.renderTree(); m.layout();
-        await error;
-        failed = !m._viewLayoutCompletion.finished && !m._expandLayoutPending &&
-          !m.getAllNode().some(node => node._expandRevealPending);
-        branch.getLayoutInstance = original;
-        branch.expand(); branch.renderTree(); m.layout();
-        await m._pendingLayout;
-        return { failedWithoutSuccess: failed, retryFinished: m._viewLayoutCompletion.finished,
-          hiddenAfterRetry: m.getAllNode().filter(node => node._expandRevealPending).length };
+        window.fixtureLayoutError = null;
+        window.fixtureSyncErrorPropagated = false;
+        const errorMessage = `隔离夹具展开失败:${failureSite}`;
+        const receive = event => {
+          const error = event.error || event;
+          if (error.message && error.message.includes(errorMessage)) window.fixtureLayoutError = error.message;
+        };
+        m.on('layouterror', receive);
+        window.addEventListener('error', receive);
+        const target = failureSite === 'doLayout' ? branch : m;
+        const method = failureSite === 'doLayout' ? 'getLayoutInstance' : 'applyLayoutResult';
+        const original = target[method];
+        const originalLayout = m.layout;
+        m.layout = function () {
+          try { return originalLayout.apply(this, arguments); }
+          catch (error) {
+            if (error.message === errorMessage) {
+              window.fixtureLayoutError = error.message;
+              window.fixtureSyncErrorPropagated = true;
+            }
+            throw error;
+          }
+        };
+        target[method] = failureSite === 'doLayout'
+          ? () => ({ doLayout() { throw new Error(errorMessage); } })
+          : () => { throw new Error(errorMessage); };
+        window.restoreFixtureFailure = () => {
+          target[method] = original;
+          m.layout = originalLayout;
+          m.off('layouterror', receive);
+          window.removeEventListener('error', receive);
+        };
+      }, failureSite);
+      await page.click(`#${expander}`);
+      await page.waitForFunction(() => Boolean(window.fixtureLayoutError));
+      const failure = await page.evaluate(() => {
+        const m = window.testEditor.minder;
+        const shown = shape => Boolean(shape && shape.node.isConnected && getComputedStyle(shape.node).display !== 'none' && getComputedStyle(shape.node).visibility !== 'hidden');
+        const children = m.getNodeById('branch').children;
+        const result = { message: window.fixtureLayoutError, syncErrorPropagated: window.fixtureSyncErrorPropagated, pending: Boolean(m._expandLayoutPending),
+          finished: m._viewLayoutCompletion.finished,
+          revealPending: m.getAllNode().filter(node => node._expandRevealPending).length,
+          visibleChildren: children.filter(node => shown(node.rc)).length,
+          visibleConnections: children.filter(node => shown(node.getConnection())).length,
+          hiddenConnectionExists: Boolean(m.getNodeById('nested-hidden').getConnection()),
+          collapsedDescendantHidden: !shown(m.getNodeById('nested-hidden').rc) && !shown(m.getNodeById('nested-hidden').getConnection()) };
+        window.restoreFixtureFailure();
+        return result;
       });
-      assert.deepStrictEqual(evidence.failureRecovery, { failedWithoutSuccess: true, retryFinished: true, hiddenAfterRetry: 0 });
+      evidence.failureRecovery.push({ failureSite, ...failure });
+      // 失败后仍为展开态；鼠标收起再展开，证明后续正常布局恢复而非伪成功。
+      await page.click(`#${expander}`); await ready();
+      await page.click(`#${expander}`); await ready();
+      evidence.failureRecovery[evidence.failureRecovery.length - 1].retryFinished = await page.evaluate(() => window.testEditor.minder._viewLayoutCompletion.finished);
     }
     evidence.overlaps = [];
     for (const frame of evidence.frames) {
@@ -213,6 +265,14 @@ async function main() {
     assert.strictEqual(evidence.layout.hidden, 0, '完成后不能留下永久隐藏节点');
     assert(evidence.layout.matchesSynchronous, '最终矩阵必须与既有同步布局一致');
     assert(evidence.unmounted, '卸载后必须释放实际SVG画布');
+    for (const failure of evidence.failureRecovery) {
+      assert.deepStrictEqual({ pending: failure.pending, finished: failure.finished, revealPending: failure.revealPending,
+        visibleChildren: failure.visibleChildren, visibleConnections: failure.visibleConnections,
+        hiddenConnectionExists: failure.hiddenConnectionExists, collapsedDescendantHidden: failure.collapsedDescendantHidden, retryFinished: failure.retryFinished },
+      { pending: false, finished: false, revealPending: 0, visibleChildren: 7, visibleConnections: 7,
+        hiddenConnectionExists: true, collapsedDescendantHidden: true, retryFinished: true }, `展开${failure.failureSite}失败应恢复节点与按父状态的连接线`);
+      if (!evidence.layout.progressive) assert(failure.syncErrorPropagated, '同步失败必须继续向调用者抛出');
+    }
     console.log('browser-tag-delete-collapse: PASS');
   } finally {
     if (browser) await browser.close();

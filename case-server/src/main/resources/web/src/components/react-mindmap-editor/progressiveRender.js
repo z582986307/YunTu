@@ -122,12 +122,7 @@ const scheduleLayout = minder => {
   }, error => {
     if (minder._pendingLayout === pending) minder._pendingLayout = null;
     if (!task.cancelled) {
-      minder._expandLayoutPending = false;
-      minder.getAllNode().forEach(node => {
-        if (!node._expandRevealPending) return;
-        node._expandRevealPending = false;
-        if (node.rc) node.rc.node.style.visibility = '';
-      });
+      minder._recoverExpandLayout();
       minder.fire('layouterror', { error });
     }
   });
