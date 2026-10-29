@@ -94,10 +94,15 @@ test('他人持锁时仍应用服务端历史通知，本地按钮则不能发�
   expect(sent).toEqual([]);
 });
 
-test('标签资源空值安全、过滤空白去重、可移除且只读操作不改变节点', () => {
+test('标签资源空值安全、过滤空白去重、可移除且只读操作不改变节点', async () => {
   let resource = null;
+  const node = { getData: () => resource, getChildren: () => [] };
   const minder = { getSelectedNodes: () => [{}], queryCommandValue: () => resource,
-    execCommand: (command, value) => { resource = value; } };
+    getRoot: () => node,
+    execCommand: (command, value, operation) => {
+      const remaining = operation === 'remove' ? (resource || []).filter(tag => tag !== value) : value;
+      resource = Array.isArray(remaining) && !remaining.length ? null : remaining;
+    } };
   const group = synchronousState(new TagGroup({ minder, tags: [] }));
   expect(() => group.onAdd('  smoke  ')).not.toThrow();
   group.onAdd('smoke');
@@ -105,8 +110,10 @@ test('标签资源空值安全、过滤空白去重、可移除且只读操作�
   expect(resource).toEqual(['smoke']);
   group.props = { minder, readOnly: true };
   group.onRemove('smoke');
+  await group.refreshAvailableTags();
   expect(resource).toEqual(['smoke']);
   group.props = { minder };
   group.onRemove('smoke');
+  await group.refreshAvailableTags();
   expect(resource).toBeNull();
 });

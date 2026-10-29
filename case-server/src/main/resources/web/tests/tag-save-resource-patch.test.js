@@ -18,7 +18,7 @@ const clone = value => JSON.parse(JSON.stringify(value));
 
 // 运行实际 importJson/importNode/exportJson/Resource.execute/applyPatch 方法，
 // 仅替换与数据契约无关的 SVG 绘制宿主；服务端镜像严格校验 RFC6902。
-const fixture = (initialData, multi = false) => {
+const fixture = (initialData, multi = false, childData = {}) => {
   const makeNode = () => ({ data: {}, children: [], getData(key) { return key ? this.data[key] : this.data; },
     setData(key, value) { this.data[key] = value; return this; },
     getChildren() { return this.children; }, getChild(index) { return this.children[index]; }, render() { return this; } });
@@ -33,7 +33,7 @@ const fixture = (initialData, multi = false) => {
     exportJson: method('exportJson', 'Text2Children', { Minder: { version: '1.4.43' } }),
     applyPatches(patches) { patches.forEach(patch => applyPatch(this, clone(patch))); },
   };
-  minder.importJson({ root: { data: clone(initialData), children: multi ? [{ data: { id: 'synthetic-child' }, children: [] }] : [] }, base: 1 });
+  minder.importJson({ root: { data: clone(initialData), children: multi ? [{ data: { id: 'synthetic-child', ...childData }, children: [] }] : [] }, base: 1 });
   let server = minder.exportJson();
   const group = new DoGroup({ minder, wsInstance: { sendMessage: (type, payload) => {
     server = jsonDiff.applyPatch(server, JSON.parse(payload.message), true, false).newDocument;
@@ -50,7 +50,7 @@ const fixture = (initialData, multi = false) => {
       };
       visit(server.root);
     },
-    resource(value) { resourceExecute(minder, value); const change = group.changed();
+    resource(value, operation) { resourceExecute(minder, value, operation); const change = group.changed();
       change.patch.forEach(batch => { server = jsonDiff.applyPatch(server, batch, true, false).newDocument; });
       return change;
     },
@@ -140,6 +140,32 @@ test('多选节点标签数组互不共享，撤销重做删项不会跨节点�
   await f.group.redo({});
   expect(f.minder.exportJson().root.data.resource).toEqual(['alpha', 'gamma']);
   expect(f.minder.exportJson().root.children[0].data.resource).toEqual(['alpha', 'beta', 'gamma']);
+});
+
+test('多选移除标签只删各自目标项，不能把选择并集写回覆盖各节点', async () => {
+  const f = fixture({ id: 'synthetic-root', text: '正文保留', image: 'synthetic.png', resource: ['alpha', 'beta'] }, true, { resource: ['alpha', 'gamma'] });
+  f.resource('alpha', 'remove');
+  const data = f.minder.exportJson().root;
+  expect(data.data.resource).toEqual(['beta']);
+  expect(data.children[0].data.resource).toEqual(['gamma']);
+  expect(data.data.text).toBe('正文保留');
+  expect(data.data.image).toBe('synthetic.png');
+  await f.group.undo({});
+  expect(f.minder.exportJson().root.data.resource).toEqual(['alpha', 'beta']);
+  expect(f.minder.exportJson().root.children[0].data.resource).toEqual(['alpha', 'gamma']);
+  await f.group.redo({});
+  expect(f.minder.exportJson().root.data.resource).toEqual(['beta']);
+  expect(f.minder.exportJson().root.children[0].data.resource).toEqual(['gamma']);
+});
+
+test('历史标签按显示时trim身份删除，保留其他原始值且空/非字符串目标不误删', () => {
+  const f = fixture({ id: 'synthetic-root', resource: [' 标签甲 ', '保留', '', null, 7] });
+  f.resource('标签甲', 'remove');
+  expect(f.minder.exportJson().root.data.resource).toEqual(['保留', '', null, 7]);
+  f.resource(' ', 'remove');
+  f.resource(null, 'remove');
+  f.resource(7, 'remove');
+  expect(f.minder.exportJson().root.data.resource).toEqual(['保留', '', null, 7]);
 });
 
 test('撤销后的源版本确认只改变base，contentchange不能清空重做栈', async () => {

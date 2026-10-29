@@ -54,6 +54,8 @@ const scheduleLayout = minder => {
   if (minder._layoutTask) minder._layoutTask.cancelled = true;
   const task = { cancelled: false };
   minder._layoutTask = task;
+  const expandLayout = minder._expandLayoutPending;
+  const completion = minder._viewLayoutCompletion = { finished: false };
   const pending = (async () => {
     const nodes = [minder.getRoot()];
     for (let cursor = 0; cursor < nodes.length; cursor++) {
@@ -65,20 +67,52 @@ const scheduleLayout = minder => {
       await runInSlices(bottomUp, node => node.getLayoutInstance().doLayout(node, node.isExpanded() ? node.children : [], round), task, 128, yieldForInteraction);
       if (task.cancelled) return;
     }
+    const matrices = new Map();
+    const presentation = [];
     await runInSlices(nodes, node => {
-      const parent = node.parent ? node.parent.getGlobalLayoutTransform() : new window.kity.Matrix();
+      const parent = node.parent ? (matrices.get(node.parent) || node.parent.getGlobalLayoutTransform()) : new window.kity.Matrix();
       const matrix = node.getLayoutTransform().merge(parent.clone());
       const offset = node.getLayoutOffset();
       matrix.translate(offset.x, offset.y);
       matrix.m.e = Math.round(matrix.m.e);
       matrix.m.f = Math.round(matrix.m.f);
+      matrices.set(node, matrix);
+      if (expandLayout) {
+        // 分片计算不变；未物化节点只更新模型，已有SVG在同一绘制事务内提交。
+        return;
+      }
       node.setGlobalLayoutTransform(matrix);
       minder.fire('layoutapply', { node, matrix });
       minder.fire('layoutfinish', { node, matrix });
     }, task, 128, yieldForInteraction);
     if (!task.cancelled) {
+      if (expandLayout) {
+        // 发布模型坐标只写内存。随后仅提交当前已物化SVG，避免5万屏外节点的同步DOM工作。
+        matrices.forEach((matrix, node) => {
+          node._globalLayoutTransform = matrix;
+          if (node.rc || node.getConnection()) presentation.push(node);
+        });
+        presentation.forEach(node => {
+          const matrix = matrices.get(node);
+          if (node._layoutTimeline) { node._layoutTimeline.stop(); node._layoutTimeline = null; }
+          node.setGlobalLayoutTransform(matrix);
+          minder.fire('layoutapply', { node, matrix });
+          minder.fire('layoutfinish', { node, matrix });
+        });
+        const presented = new Set(presentation);
+        // 仍按原契约通知屏外节点/绘制分组；通知同样分片，不让隐藏节点拖长绘制提交。
+        await runInSlices(nodes, node => {
+          if (presented.has(node)) return;
+          const matrix = matrices.get(node);
+          minder.fire('layoutapply', { node, matrix });
+          minder.fire('layoutfinish', { node, matrix });
+        }, task, 128, yieldForInteraction);
+        if (task.cancelled) return;
+        minder._expandLayoutPending = false;
+      }
       minder.fire('layout');
       minder.fire('layoutallfinish');
+      completion.finished = true;
       minder._interactChange();
     }
   })();
@@ -87,7 +121,15 @@ const scheduleLayout = minder => {
     if (minder._pendingLayout === pending) minder._pendingLayout = null;
   }, error => {
     if (minder._pendingLayout === pending) minder._pendingLayout = null;
-    if (!task.cancelled) minder.fire('layouterror', { error });
+    if (!task.cancelled) {
+      minder._expandLayoutPending = false;
+      minder.getAllNode().forEach(node => {
+        if (!node._expandRevealPending) return;
+        node._expandRevealPending = false;
+        if (node.rc) node.rc.node.style.visibility = '';
+      });
+      minder.fire('layouterror', { error });
+    }
   });
   return minder;
 };

@@ -80,9 +80,11 @@ class TagGroup extends Component {
   };
   onRemove = value => {
     if (this.disabled()) return;
-    const resource = cleanTags(this.props.minder.queryCommandValue('Resource')).filter(tag => tag !== value);
-    this.props.minder.execCommand('Resource', resource.length ? resource : null);
+    this.props.minder.execCommand('Resource', value, 'remove');
     this.updateSelection();
+    this.setState({ newTags: this.state.newTags.filter(tag => tag !== value) });
+    clearTimeout(this.scanTimer);
+    this.refreshAvailableTags();
   };
   onClear = () => {
     if (this.disabled()) return;

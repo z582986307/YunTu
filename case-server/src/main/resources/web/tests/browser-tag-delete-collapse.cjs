@@ -1,0 +1,222 @@
+// 仅使用真实编辑器与本地 Socket 夹具；不访问业务服务或用户数据。
+const assert = require('assert');
+const fs = require('fs');
+const http = require('http');
+const path = require('path');
+const root = path.resolve(__dirname, '../../../../../..');
+const output = path.join(root, 'temp/tag-delete-collapse');
+const puppeteer = require(path.join(root, '项目依赖/YunTu-Web/node_modules/puppeteer-core'));
+
+async function main() {
+  fs.mkdirSync(output, { recursive: true });
+  const server = http.createServer((request, response) => {
+    if (request.url === '/editor.js') {
+      response.setHeader('Content-Type', 'text/javascript');
+      response.end(fs.readFileSync(path.join(output, 'editor-build/editor.js')));
+    } else response.end('<!doctype html><meta charset="utf-8"><div id="map"></div><script src="/editor.js"></script>');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  let browser;
+  const evidence = {};
+  try {
+    browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+      headless: true, userDataDir: path.join(output, `chrome-${process.pid}`), defaultViewport: { width: 1600, height: 1000 } });
+    const page = await browser.newPage();
+    page.setDefaultTimeout(180000);
+    await page.goto(`http://127.0.0.1:${server.address().port}`);
+    await page.evaluate(async () => {
+      window.testEditor = await window.mountTestEditor({ template: 'right', theme: 'byte-blue', base: 1,
+        root: { data: { id: 'r', text: '隔离根节点' }, children: [
+          { data: { id: 'a', text: '目标节点', resource: ['标签甲', '标签乙', ' 历史空格标签 '] } },
+          { data: { id: 'b', text: '其他节点', resource: ['标签丙'] } },
+        ] } }, false, { width: '100%', height: '900px' });
+    });
+    const ready = () => page.waitForFunction(() => {
+      const e = window.testEditor, m = e && e.minder;
+      return m && !e.state.loading && !m._progressiveImporting && !m._pendingLayout &&
+        (!m._viewLayoutCompletion || m._viewLayoutCompletion.finished);
+    });
+    await ready();
+    await page.evaluate(() => {
+      const m = window.testEditor.minder;
+      m.setOption('viewAnimationDuration', 0);
+      m.execCommand('camera', m.getNodeById('a'));
+      m.select(m.getNodeById('b'), true);
+    });
+    const badge = 'svg [aria-label="标签：标签甲"]';
+    await page.hover(badge);
+    const remove = `${badge} [data-resource-remove]`;
+    await page.waitForSelector(remove);
+    evidence.tag = await page.$eval(remove, element => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      return { box: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        opacity: getComputedStyle(element).opacity, hitInside: element.contains(hit) };
+    });
+    await page.click(remove);
+    evidence.tag.resourcesAfterClick = await page.evaluate(() => {
+      const m = window.testEditor.minder;
+      return { a: m.getNodeById('a').getData('resource'), b: m.getNodeById('b').getData('resource') };
+    });
+    await page.click('[aria-label="展开外观"]');
+    await page.click('[aria-label="清除标签：历史空格标签"]');
+    evidence.toolbarTrim = await page.evaluate(() => window.testEditor.minder.getNodeById('a').getData('resource'));
+    assert.deepStrictEqual(evidence.toolbarTrim, ['标签乙'], '真实工具栏应按规范化显示身份删除历史空格标签');
+    await page.click('.mindmap-tag-add');
+    await page.type('[aria-label="新标签名称"]', '浏览器新增标签');
+    await page.keyboard.press('Enter');
+    await page.click('[aria-label="应用标签：浏览器新增标签"]');
+    const candidate = '[aria-label="清除标签：浏览器新增标签"]';
+    await page.hover('[aria-label="已应用标签：浏览器新增标签"]');
+    evidence.toolbar = await page.$eval(candidate, button => {
+      const box = button.getBoundingClientRect(), tag = button.parentElement.getBoundingClientRect();
+      return { background: getComputedStyle(button).backgroundColor, color: getComputedStyle(button).color,
+        width: box.width, height: box.height, tagWidth: tag.width };
+    });
+    await page.screenshot({ path: path.join(output, 'tag-toolbar.png') });
+    await page.click(candidate);
+    await page.waitForSelector('[aria-label="应用标签：浏览器新增标签"]', { hidden: true });
+    evidence.toolbar.removed = true;
+    // 初始收起分支的孩子尚无最终坐标，展开前后逐帧记录真实SVG矩形。
+    await page.evaluate(async nodeCount => {
+      window.unmountTestEditor();
+      const fillers = nodeCount < 10000
+        ? Array.from({ length: nodeCount }, (_, i) => ({ data: { id: `f${i}`, text: `背景节点${i}` } }))
+        : Array.from({ length: Math.ceil(nodeCount / 100) }, (_, i) => ({ data: { id: `f${i}`, text: `背景分支${i}` },
+          children: Array.from({ length: 100 }, (_, j) => ({ data: { id: `f${i}-${j}`, text: `背景节点${i}-${j}` } })) }));
+      window.testEditor = await window.mountTestEditor({ template: 'right', theme: 'byte-blue', root: { data: { id: 'r', text: '根' }, children: [
+        { data: { id: 'branch', text: '折叠分支', expandState: 'collapse' }, children: Array.from({ length: 7 }, (_, i) => ({ data: { id: `c${i}`, text: `子节点${i}` } })) },
+        { data: { id: 'sibling', text: '相邻节点' }, children: [{ data: { id: 'leaf', text: '相邻叶节点' } }] },
+        ...fillers,
+      ] } }, false, { width: '100%', height: '900px' });
+    }, Number(process.env.NODE_COUNT || 0));
+    await ready();
+    console.log('真实编辑器数据就绪，开始折叠帧录取');
+    await page.evaluate(() => {
+      const m = window.testEditor.minder;
+      m.setOption('viewAnimationDuration', 0);
+      m.execCommand('camera', m.getNodeById('branch'));
+      window.geometryFrames = [];
+      window.commitStats = [];
+      const nodePrototype = Object.getPrototypeOf(m.getRoot());
+      const setTransform = nodePrototype.setGlobalLayoutTransform;
+      nodePrototype.setGlobalLayoutTransform = function (matrix) {
+        const entry = window.commitStats[window.commitStats.length - 1];
+        if (entry && this.rc) {
+          entry.domMatrices++;
+          if (entry.domFirst == null) entry.domFirst = performance.now();
+          const result = setTransform.call(this, matrix);
+          entry.domLast = performance.now();
+          return result;
+        }
+        return setTransform.call(this, matrix);
+      };
+      window.longTasks = [];
+      new PerformanceObserver(list => window.longTasks.push(...list.getEntries().map(entry => ({ start: entry.startTime, duration: entry.duration }))))
+        .observe({ type: 'longtask', buffered: true });
+      m.on('layoutapply', () => {
+        const entry = window.commitStats[window.commitStats.length - 1];
+        if (entry) { entry.applied++; entry.last = performance.now(); }
+      });
+      const capture = phase => {
+        const nodes = m.getAllNode().filter(node => node.rc && node.rc.node.isConnected && getComputedStyle(node.rc.node).display !== 'none' && getComputedStyle(node.rc.node).visibility !== 'hidden');
+        const boxes = nodes.map(node => { const b = node.rc.node.getBoundingClientRect(); return { id: node.getData('id'), x: b.x, y: b.y, width: b.width, height: b.height }; })
+          .filter(b => b.width && b.height && b.x < innerWidth && b.x + b.width > 0 && b.y < innerHeight && b.y + b.height > 0);
+        window.geometryFrames.push({ phase, boxes });
+      };
+      const finish = () => window.rapidClicksDone !== false && !m._pendingLayout && (!m._viewLayoutCompletion || m._viewLayoutCompletion.finished);
+      window.recordGeometry = phase => {
+        window.commitStats.push({ phase, applied: 0, domMatrices: 0, start: performance.now() });
+        capture(`${phase}:before`);
+        let count = 0;
+        const tick = () => { capture(`${phase}:frame${count++}`); if (!finish() || count < 3) requestAnimationFrame(tick); else window.geometryDone = true; };
+        window.geometryDone = false;
+        requestAnimationFrame(tick);
+      };
+    });
+    const expander = await page.evaluate(() => window.testEditor.minder.getNodeById('branch').getRenderer('ExpanderRenderer').expander.node.id);
+    for (const phase of ['expand', 'collapse', 'expand-again']) {
+      await page.evaluate(({ phase, expander }) => {
+        document.getElementById(expander).addEventListener('mousedown', () => window.recordGeometry(phase), { capture: true, once: true });
+      }, { phase, expander });
+      await page.click(`#${expander}`);
+      await page.waitForFunction(() => window.geometryDone);
+    }
+    await page.evaluate(expander => {
+      window.rapidClicksDone = false;
+      window.rapidTasks = [];
+      document.getElementById(expander).addEventListener('mousedown', () => window.recordGeometry('rapid'), { capture: true, once: true });
+    }, expander);
+    for (let i = 0; i < 6; i++) {
+      await page.click(`#${expander}`);
+      await page.evaluate(() => {
+        const m = window.testEditor.minder;
+        window.rapidTasks.push({ task: m._layoutTask, completion: m._viewLayoutCompletion });
+      });
+    }
+    await page.evaluate(() => { window.rapidClicksDone = true; });
+    await page.waitForFunction(() => window.geometryDone);
+    evidence.frames = await page.evaluate(() => window.geometryFrames);
+    evidence.layout = await page.evaluate(() => ({ nodeCount: window.testEditor.minder.getAllNode().length,
+      progressive: Boolean(window.testEditor.minder._scheduleLayout), commits: window.commitStats,
+      completion: window.testEditor.minder._viewLayoutCompletion,
+      cancelledWithoutCompletion: window.rapidTasks.filter(entry => entry.task && entry.task.cancelled && !entry.completion.finished).length,
+      longTasks: window.longTasks.filter(entry => entry.start >= window.commitStats[0].start),
+      hidden: window.testEditor.minder.getAllNode().filter(node => node._expandRevealPending).length }));
+    evidence.layout.matchesSynchronous = await page.evaluate(() => {
+      const m = window.testEditor.minder;
+      const snapshot = () => m.getAllNode().filter(node => !node.parent || node.parent.isExpanded()).map(node => {
+        const matrix = node.getGlobalLayoutTransform().m; return [node.getData('id'), matrix.e, matrix.f];
+      });
+      const before = JSON.stringify(snapshot()), schedule = m._scheduleLayout;
+      m._scheduleLayout = null;
+      const duration = m.getOption('layoutAnimationDuration');
+      m.setOption('layoutAnimationDuration', 0);
+      m.layout();
+      m.setOption('layoutAnimationDuration', duration);
+      m._scheduleLayout = schedule;
+      return before === JSON.stringify(snapshot());
+    });
+    if (evidence.layout.progressive) {
+      evidence.failureRecovery = await page.evaluate(async () => {
+        const m = window.testEditor.minder, branch = m.getNodeById('branch');
+        const original = branch.getLayoutInstance;
+        let failed = false;
+        branch.getLayoutInstance = () => ({ doLayout() { throw new Error('隔离夹具注入的布局失败'); } });
+        const error = new Promise(resolve => m.on('layouterror', () => resolve()));
+        branch.collapse(); branch.renderTree(); m.layout();
+        await error;
+        failed = !m._viewLayoutCompletion.finished && !m._expandLayoutPending &&
+          !m.getAllNode().some(node => node._expandRevealPending);
+        branch.getLayoutInstance = original;
+        branch.expand(); branch.renderTree(); m.layout();
+        await m._pendingLayout;
+        return { failedWithoutSuccess: failed, retryFinished: m._viewLayoutCompletion.finished,
+          hiddenAfterRetry: m.getAllNode().filter(node => node._expandRevealPending).length };
+      });
+      assert.deepStrictEqual(evidence.failureRecovery, { failedWithoutSuccess: true, retryFinished: true, hiddenAfterRetry: 0 });
+    }
+    evidence.overlaps = [];
+    for (const frame of evidence.frames) {
+      for (let i = 0; i < frame.boxes.length; i++) for (let j = i + 1; j < frame.boxes.length; j++) {
+        const a = frame.boxes[i], b = frame.boxes[j];
+        if (Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x) > 2 &&
+            Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y) > 2) evidence.overlaps.push({ phase: frame.phase, ids: [a.id, b.id] });
+      }
+    }
+    await page.evaluate(() => window.unmountTestEditor());
+    evidence.unmounted = await page.evaluate(() => !document.querySelector('#map svg'));
+    fs.writeFileSync(path.join(output, `${process.env.EVIDENCE_NAME || 'browser'}.json`), JSON.stringify(evidence, null, 2));
+    console.log(JSON.stringify({ tag: evidence.tag, layout: evidence.layout, frameCount: evidence.frames.length, overlaps: evidence.overlaps.slice(0, 8) }));
+    assert.deepStrictEqual(evidence.tag.resourcesAfterClick, { a: ['标签乙', ' 历史空格标签 '], b: ['标签丙'] }, '真实鼠标点击SVG×应仅移除目标标签');
+    assert.strictEqual(evidence.overlaps.length, 0, '展开收起各可见帧不应交叉重叠');
+    assert.strictEqual(evidence.layout.hidden, 0, '完成后不能留下永久隐藏节点');
+    assert(evidence.layout.matchesSynchronous, '最终矩阵必须与既有同步布局一致');
+    assert(evidence.unmounted, '卸载后必须释放实际SVG画布');
+    console.log('browser-tag-delete-collapse: PASS');
+  } finally {
+    if (browser) await browser.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+main().catch(error => { console.error(error.message); process.exitCode = 1; });

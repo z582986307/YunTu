@@ -770,7 +770,7 @@
           var connection = node._connection;
           var parent = node.parent;
           if (!parent || !connection) return;
-          if (parent.isCollapsed()) {
+          if (parent.isCollapsed() || node._expandRevealPending) {
             connection.setVisible(false);
             return;
           }
@@ -1976,7 +1976,9 @@
           if (this._scheduleLayout && !this._progressiveImporting) return this._scheduleLayout();
           // 恢复视图需等待实际末帧及 layoutallfinish，不能按动画时长猜测。
           var completion = this._viewLayoutCompletion = { finished: false };
-          var duration = this.getOption('layoutAnimationDuration');
+          // 折叠改变可见树：新显露节点不能从父节点的旧矩阵穿过兄弟节点。
+          var expandLayout = this._expandLayoutPending;
+          var duration = expandLayout ? 0 : this.getOption('layoutAnimationDuration');
           this.getRoot().traverse(function (node) {
             // clear last results
             node.setLayoutTransform(null);
@@ -2011,6 +2013,7 @@
               finally { completion.finished = true; }
             }, 0);
           });
+          if (expandLayout) this._expandLayoutPending = false;
           return this.fire('layout');
         },
         refresh: function () {
@@ -5460,6 +5463,7 @@
            * @param  {Policy} policy 展开的策略，默认为 KEEP_STATE
            */
           expand: function () {
+            if (this.getData(EXPAND_STATE_DATA) === STATE_COLLAPSE && this.getMinder()) this.getMinder()._expandLayoutPending = true;
             this.setData(EXPAND_STATE_DATA, STATE_EXPAND);
             return this;
           },
@@ -5467,6 +5471,7 @@
            * 收起节点
            */
           collapse: function () {
+            if (this.getData(EXPAND_STATE_DATA) !== STATE_COLLAPSE && this.getMinder()) this.getMinder()._expandLayoutPending = true;
             this.setData(EXPAND_STATE_DATA, STATE_COLLAPSE);
             return this;
           },
@@ -5658,6 +5663,11 @@
           },
           events: {
             layoutapply: function (e) {
+              if (e.node._expandRevealPending) {
+                e.node._expandRevealPending = false;
+                if (e.node.rc) e.node.rc.node.style.visibility = '';
+                this.updateConnect(e.node);
+              }
               var r = e.node.getRenderer('ExpanderRenderer');
               if (r && r.getRenderShape()) {
                 r.update(r.getRenderShape(), e.node);
@@ -5667,6 +5677,13 @@
               var node = e.node;
               var visible = !node.parent || node.parent.isExpanded();
               var minder = this;
+              var container = node.getRenderContainer();
+              if (visible && minder._expandLayoutPending &&
+                  (node._expandRevealPending || !node._globalLayoutTransform || container.node.getAttribute('display') === 'none')) {
+                node._expandRevealPending = true;
+                // visibility 保留测量；只有新显露节点等待最终矩阵，不遮盖已有画布。
+                container.node.style.visibility = 'hidden';
+              }
               node.getRenderContainer().setVisible(visible);
               if (!visible) e.stopPropagation();
             },
@@ -7525,16 +7542,21 @@
          */
         var ResourceCommand = kity.createClass('ResourceCommand', {
           base: Command,
-          execute: function (minder, resource) {
+          execute: function (minder, resource, operation) {
             var nodes = minder.getSelectedNodes();
+            var removed = operation === 'remove' && typeof resource === 'string' ? resource.trim() : '';
             if (typeof resource == 'string') {
               resource = [resource];
             }
             nodes.forEach(function (node) {
-              if (resource == null || (Array.isArray(resource) && resource.length === 0)) {
+              var value = operation === 'remove'
+                ? (node.getData('resource') || []).filter(function (tag) {
+                  return !removed || typeof tag !== 'string' || tag.trim() !== removed;
+                }) : resource;
+              if (value == null || (Array.isArray(value) && value.length === 0)) {
                 delete node.data.resource;
               } else {
-                node.setData('resource', Array.isArray(resource) ? resource.slice() : resource);
+                node.setData('resource', Array.isArray(value) ? value.slice() : value);
               }
               node.render();
             });
@@ -7581,8 +7603,8 @@
             remove.node.setAttribute('data-resource-remove', 'true');
             remove.node.setAttribute('role', 'button');
             remove.node.setAttribute('tabindex', '0');
-            remove.addShape(new kity.Circle(7).fill('#f53f3f').stroke('#ffffff', 1));
-            remove.addShape(new kity.Path().setPathData('M-2.5,-2.5L2.5,2.5M2.5,-2.5L-2.5,2.5').stroke('#ffffff', 1.5));
+            remove.addShape(new kity.Circle(7).fill('#ffffff').stroke('#cbd5e1', 1));
+            remove.addShape(new kity.Path().setPathData('M-2.5,-2.5L2.5,2.5M2.5,-2.5L-2.5,2.5').stroke('#86909c', 1.2));
             remove.setStyle('cursor', 'pointer');
             overlay.addShape(remove);
             remove.setTranslate(overlay.width - 1, overlay.removeY);

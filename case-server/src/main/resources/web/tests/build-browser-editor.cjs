@@ -6,7 +6,7 @@ const resolve = name => require.resolve(name, { paths: [deps] });
 webpack({
   mode: 'production',
   entry: path.join(__dirname, 'browser-editor-entry.js'),
-  output: { path: path.join(root, '运行日志/脑图性能/editor-build'), filename: 'editor.js' },
+  output: { path: process.env.BROWSER_EDITOR_OUTPUT || path.join(root, '运行日志/脑图性能/editor-build'), filename: 'editor.js' },
   resolve: { modules: [deps, 'node_modules'] },
   resolveLoader: { modules: [deps] },
   optimization: { minimize: false },

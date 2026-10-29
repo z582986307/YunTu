@@ -4,7 +4,7 @@ const path = require('path')
 
 test('执行页脑图交互与结果标记保持回归约束', () => {
 const root = path.resolve(__dirname, '../src/components/react-mindmap-editor')
-const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+const read = file => fs.readFileSync(path.join(root, file), 'utf8').replace(/\r\n/g, '\n')
 
 const editor = read('index.js')
 const socket = read('socket.js')

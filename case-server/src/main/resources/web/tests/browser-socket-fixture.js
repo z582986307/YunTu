@@ -2,6 +2,7 @@ export default function createSocketFixture() {
   const handlers = {};
   const socket = {
     on(name, callback) { handlers[name] = callback; return socket; },
+    off(name) { delete handlers[name]; return socket; },
     connect() {
       setTimeout(() => {
         if (handlers.connect) handlers.connect();

@@ -19,7 +19,10 @@ const fixture = () => {
   const node = { getData: key => data[key], getChildren: () => [] };
   const minder = { getSelectedNodes: () => [node], getSelectedNode: () => node, getRoot: () => node,
     queryCommandValue: name => data[name.toLowerCase()], queryCommandState: () => 0,
-    execCommand: (name, value) => { data[name.toLowerCase()] = value; }, on: () => {}, off: () => {} };
+    execCommand: (name, value, operation) => {
+      const remaining = operation === 'remove' ? (data.resource || []).filter(tag => tag !== value) : value;
+      data[name.toLowerCase()] = Array.isArray(remaining) && !remaining.length ? null : remaining;
+    }, on: () => {}, off: () => {} };
   return { minder, data };
 };
 
