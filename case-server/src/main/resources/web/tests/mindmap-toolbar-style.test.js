@@ -20,6 +20,13 @@ const fixture = () => {
   const minder = { getSelectedNodes: () => [node], getSelectedNode: () => node, getRoot: () => node,
     queryCommandValue: name => data[name.toLowerCase()], queryCommandState: () => 0,
     execCommand: (name, value, operation) => {
+      if (name === 'TagCatalog') {
+        const catalog = data.tagCatalog || { added: [], removed: [] };
+        data.tagCatalog = operation === 'remove'
+          ? { added: catalog.added.filter(tag => tag !== value), removed: [...catalog.removed, value] }
+          : { added: [...catalog.added, value], removed: catalog.removed.filter(tag => tag !== value) };
+        return;
+      }
       const remaining = operation === 'remove' ? (data.resource || []).filter(tag => tag !== value) : value;
       data[name.toLowerCase()] = Array.isArray(remaining) && !remaining.length ? null : remaining;
     }, on: () => {}, off: () => {} };
@@ -61,7 +68,8 @@ test('标签按钮保持应用和移除能力，长名称可查看全文，添�
   expect(data.resource).toEqual(['回归', label]);
   expect(holder.querySelector(`[aria-label="已应用标签：${label}"]`).getAttribute('aria-pressed')).toBe('true');
   act(() => { holder.querySelector(`[aria-label="已应用标签：${label}"]`).closest('.ant-tag').querySelector('.anticon-close').click(); });
-  expect(data.resource).toEqual(['回归']);
+  expect(data.resource).toEqual(['回归', label]);
+  expect(holder.querySelector(`[title="${label}"]`)).toBeNull();
   act(() => { holder.querySelector('.mindmap-tag-add').click(); });
   const input = holder.querySelector('input[aria-label="新标签名称"]');
   expect(document.activeElement).toBe(input);

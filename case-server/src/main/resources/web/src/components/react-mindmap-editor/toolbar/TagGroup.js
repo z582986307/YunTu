@@ -6,7 +6,7 @@ const cleanTags = values => Array.from(new Set((Array.isArray(values) ? values :
   .filter(value => typeof value === 'string').map(value => value.trim()).filter(Boolean)));
 
 class TagGroup extends Component {
-  state = { selectedResource: [], availableTags: [], newTags: [], inputVisible: false, inputValue: '' };
+  state = { selectedResource: [], availableTags: [], inputVisible: false, inputValue: '' };
   componentDidMount() {
     this.props.minder.on('selectionchange', this.updateSelection);
     this.props.minder.on('contentchange', this.onContentChange);
@@ -23,7 +23,15 @@ class TagGroup extends Component {
     this.props.minder.off('import progressiveimportdone', this.refreshAvailableTags);
     window.tagInput = false;
   }
-  disabled = () => this.props.readOnly || this.props.isLock || !this.props.minder.getSelectedNodes().length;
+  catalogDisabled = () => this.props.readOnly || this.props.isLock ||
+    (this.props.isUserInputAllowed && !this.props.isUserInputAllowed());
+  disabled = () => this.catalogDisabled() || !this.props.minder.getSelectedNodes().length;
+  getTags = () => {
+    const catalog = this.props.minder.getRoot().getData('tagCatalog') || {};
+    const removed = cleanTags(catalog.removed);
+    return cleanTags([...(this.props.tags || []), ...this.state.availableTags,
+      ...this.state.selectedResource, ...cleanTags(catalog.added)]).filter(tag => !removed.includes(tag));
+  };
   updateSelection = () => {
     if (!this.unmounted) this.setState({ selectedResource: cleanTags(this.props.minder.queryCommandValue('Resource')) });
   };
@@ -45,7 +53,7 @@ class TagGroup extends Component {
     if (!task.cancelled && !this.unmounted) this.setState({ availableTags: Array.from(tags) });
   };
   showInput = () => {
-    if (this.disabled()) return;
+    if (this.catalogDisabled()) return;
     window.tagInput = true;
     this.setState({ inputVisible: true }, () => this.input && this.input.focus());
   };
@@ -62,10 +70,10 @@ class TagGroup extends Component {
         (event.nativeEvent && event.nativeEvent.isComposing) ||
         (this.pendingImeEnter && event.type === 'keydown')))) return;
     const value = this.state.inputValue.trim();
-    const exists = cleanTags([...(this.props.tags || []), ...this.state.availableTags, ...this.state.newTags]);
-    if (value && !this.disabled()) {
+    const exists = this.getTags();
+    if (value && !this.catalogDisabled()) {
       if (exists.includes(value)) message.info('该标签已存在，点击标签即可应用到选中节点');
-      else this.setState({ newTags: [...this.state.newTags, value] });
+      else this.props.minder.execCommand('TagCatalog', value, 'add');
     }
     this.setState({ inputVisible: false, inputValue: '' });
     window.tagInput = false;
@@ -79,12 +87,9 @@ class TagGroup extends Component {
     this.updateSelection();
   };
   onRemove = value => {
-    if (this.disabled()) return;
-    this.props.minder.execCommand('Resource', value, 'remove');
+    if (this.catalogDisabled()) return;
+    this.props.minder.execCommand('TagCatalog', value, 'remove');
     this.updateSelection();
-    this.setState({ newTags: this.state.newTags.filter(tag => tag !== value) });
-    clearTimeout(this.scanTimer);
-    this.refreshAvailableTags();
   };
   onClear = () => {
     if (this.disabled()) return;
@@ -92,29 +97,28 @@ class TagGroup extends Component {
     this.updateSelection();
   };
   render() {
-    const { selectedResource, availableTags, newTags, inputVisible, inputValue } = this.state;
+    const { selectedResource, inputVisible, inputValue } = this.state;
     const disabled = this.disabled();
-    const tags = cleanTags([...(this.props.tags || []), ...availableTags, ...newTags, ...selectedResource]);
+    const catalogDisabled = this.catalogDisabled();
+    const tags = this.getTags();
     return <div className="nodes-actions mindmap-tag-actions">
       <div className="mindmap-tag-heading mindmap-appearance-heading">
-        <span className="mindmap-group-label">标签</span><span className="mindmap-tag-hint">（点击应用；已选标签可移除）</span>
+        <span className="mindmap-group-label">标签</span><span className="mindmap-tag-hint">（点击应用；×仅删除可用项）</span>
       </div>
       <div className="mindmap-tag-controls">
       <div className="mindmap-tag-list">
         {tags.map(tag => <span key={tag}
           className={`ant-tag mindmap-tool-tag${selectedResource.includes(tag) ? ' is-selected' : ''}`}
-          aria-disabled={disabled}>
+          aria-disabled={catalogDisabled}>
           <button type="button" disabled={disabled} className="mindmap-tag-button"
             title={tag}
             aria-label={`${selectedResource.includes(tag) ? '已应用标签' : '应用标签'}：${tag}`}
             aria-pressed={selectedResource.includes(tag)} onClick={() => this.onAdd(tag)}>{tag}</button>
-          <button type="button" className="mindmap-tag-remove" aria-label={`清除标签：${tag}`} title={`清除标签：${tag}`}
-            disabled={disabled || !(selectedResource.includes(tag) || newTags.includes(tag))}
+          <button type="button" className="mindmap-tag-remove" aria-label={`删除可用标签：${tag}`} title={`删除可用标签：${tag}`}
+            disabled={catalogDisabled}
             onClick={event => {
               event.stopPropagation();
-              if (this.disabled()) return;
-              if (selectedResource.includes(tag)) this.onRemove(tag);
-              else this.setState({ newTags: newTags.filter(value => value !== tag) });
+              this.onRemove(tag);
             }}><Icon type="close" /></button>
         </span>)}
       </div>
@@ -125,8 +129,8 @@ class TagGroup extends Component {
         onKeyUp={event => { this.stopInputKeyboard(event); if (!this.composing) this.pendingImeEnter = false; }}
         onCompositionStart={() => { this.composing = true; this.pendingImeEnter = false; }}
         onCompositionEnd={() => { this.composing = false; this.pendingImeEnter = true; }}
-        onPressEnter={this.handleInputConfirm} disabled={disabled} /> :
-        <Button type="link" className="mindmap-tool-button mindmap-tag-add" size="small" disabled={disabled} onClick={this.showInput}><Icon type="plus" />添加标签</Button>}
+        onPressEnter={this.handleInputConfirm} disabled={catalogDisabled} /> :
+        <Button type="link" className="mindmap-tool-button mindmap-tag-add" size="small" disabled={catalogDisabled} onClick={this.showInput}><Icon type="plus" />添加标签</Button>}
       <Button type="link" className="mindmap-tool-button mindmap-tag-clear" size="small"
         aria-label="清除当前节点标签" disabled={disabled || !selectedResource.length} onClick={this.onClear}>清除</Button>
       </div>

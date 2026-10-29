@@ -529,6 +529,10 @@
 .km-resource-badge .km-resource-remove { opacity: 0; pointer-events: none; }
 .km-resource-badge:hover .km-resource-remove,
 .km-resource-badge:focus-within .km-resource-remove { opacity: 1; pointer-events: auto; }
+.km-resource-badge:focus { outline: none; }
+.km-resource-badge:focus-visible > rect { stroke: #3370ff; stroke-width: 1.5px; }
+.km-resource-remove:focus { outline: none; }
+.km-resource-remove:focus-visible > circle { stroke: #3370ff; stroke-width: 1.5px; }
 .kityminder-editor-container[data-resource-editable='false'] .km-resource-remove { display: none; }
 .yuntu-lock-wrap {
   display: inline-flex;

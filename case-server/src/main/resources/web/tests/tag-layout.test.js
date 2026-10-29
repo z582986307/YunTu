@@ -14,6 +14,13 @@ const fixture = () => {
   return { data, minder: { getRoot: () => node, getSelectedNode: () => node, getSelectedNodes: () => [node], on: () => {}, off: () => {},
     queryCommandValue: command => data[command.toLowerCase()], queryCommandState: () => 0,
     execCommand: (command, value, operation) => {
+      if (command === 'TagCatalog') {
+        const catalog = data.tagCatalog || { added: [], removed: [] };
+        data.tagCatalog = operation === 'remove'
+          ? { added: catalog.added.filter(tag => tag !== value), removed: [...catalog.removed, value] }
+          : { added: [...catalog.added, value], removed: catalog.removed.filter(tag => tag !== value) };
+        return;
+      }
       const remaining = operation === 'remove' ? (data.resource || []).filter(tag => tag !== value) : value;
       data[command.toLowerCase()] = Array.isArray(remaining) && !remaining.length ? null : remaining;
     } } };
@@ -21,10 +28,10 @@ const fixture = () => {
 test('标签标题和括号说明同一标题区，应用后删除控件不再改变标签DOM占位', () => {
   const { minder, data } = fixture();
   act(() => { ReactDOM.render(<TagGroup minder={minder} tags={['甲', '乙']} />, holder); });
-  expect(holder.querySelector('.mindmap-tag-heading').textContent).toBe('标签（点击应用；已选标签可移除）');
+  expect(holder.querySelector('.mindmap-tag-heading').textContent).toContain('标签');
   const tag = holder.querySelector('[aria-label="应用标签：甲"]').closest('.mindmap-tool-tag');
   const remove = tag.querySelector('.mindmap-tag-remove');
-  expect(remove.disabled).toBe(true);
+  expect(remove.disabled).toBe(false);
   const count = tag.childNodes.length;
   act(() => { tag.querySelector('.mindmap-tag-button').click(); });
   expect(data.resource).toEqual(['甲']);
@@ -32,7 +39,8 @@ test('标签标题和括号说明同一标题区，应用后删除控件不再�
   expect(tag.childNodes.length).toBe(count);
   expect(remove.disabled).toBe(false);
   act(() => { remove.click(); });
-  expect(data.resource).toBeNull();
+  expect(data.resource).toEqual(['甲']);
+  expect(holder.querySelector('[title="甲"]')).toBeNull();
   expect(holder.querySelector('[aria-label="应用标签：乙"]')).not.toBeNull();
 });
 test('标签组清除只移除节点标签，不删除可选标签，任务只读不显示可用删除', () => {
@@ -55,20 +63,21 @@ test('字体五操作排在字号前，保留独立控件与命令入口', () =>
   expect(actions.compareDocumentPosition(select) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test('新建标签应用后点击×，同时移除节点应用和未持久化候选', async () => {
+test('新建标签应用后点击列表×，只删除候选而保留节点标签', async () => {
   const { minder, data } = fixture();
   let group;
   act(() => { ReactDOM.render(<TagGroup ref={value => { group = value; }} minder={minder} tags={[]} />, holder); });
-  act(() => { group.setState({ newTags: ['临时标签'] }); });
+  act(() => { group.setState({ inputValue: '临时标签' }); });
+  act(() => { group.handleInputConfirm(); });
   act(() => { holder.querySelector('[aria-label="应用标签：临时标签"]').click(); });
   expect(data.resource).toEqual(['临时标签']);
-  act(() => { holder.querySelector('[aria-label="清除标签：临时标签"]').click(); });
+  act(() => { holder.querySelector('.mindmap-tag-remove').click(); });
   await act(async () => { await group.refreshAvailableTags(); });
-  expect(data.resource).toBeNull();
+  expect(data.resource).toEqual(['临时标签']);
   expect(holder.querySelector('[aria-label="应用标签：临时标签"]')).toBeNull();
 });
 
-test('其他节点仍有同名标签时，清除本地候选不能把实际可选项隐藏', async () => {
+test('其他节点与选中节点同名标签不会复活已删除候选', async () => {
   const { minder, data } = fixture();
   const other = { getData: key => key === 'resource' ? ['共享标签'] : undefined, getChildren: () => [] };
   const root = minder.getRoot();
@@ -76,11 +85,11 @@ test('其他节点仍有同名标签时，清除本地候选不能把实际可�
   let group;
   data.resource = ['共享标签'];
   act(() => { ReactDOM.render(<TagGroup ref={value => { group = value; }} minder={minder} tags={[]} />, holder); });
-  act(() => { group.setState({ newTags: ['共享标签'] }); });
-  act(() => { holder.querySelector('[aria-label="清除标签：共享标签"]').click(); });
   await act(async () => { await group.refreshAvailableTags(); });
-  expect(data.resource).toBeNull();
-  expect(holder.querySelector('[aria-label="应用标签：共享标签"]')).not.toBeNull();
+  act(() => { holder.querySelector('.mindmap-tag-remove').click(); });
+  await act(async () => { await group.refreshAvailableTags(); });
+  expect(data.resource).toEqual(['共享标签']);
+  expect(holder.querySelector('[title="共享标签"]')).toBeNull();
   expect(other.getData('resource')).toEqual(['共享标签']);
 });
 
@@ -88,8 +97,29 @@ test('新建但尚未应用的自定义标签可以直接点击×删除', () => 
   const { minder, data } = fixture();
   let group;
   act(() => { ReactDOM.render(<TagGroup ref={value => { group = value; }} minder={minder} tags={[]} />, holder); });
-  act(() => { group.setState({ newTags: ['未应用标签'] }); });
-  act(() => { holder.querySelector('[aria-label="清除标签：未应用标签"]').click(); });
+  act(() => { group.setState({ inputValue: '未应用标签' }); });
+  act(() => { group.handleInputConfirm(); });
+  act(() => { holder.querySelector('.mindmap-tag-remove').click(); });
   expect(holder.querySelector('[aria-label="应用标签：未应用标签"]')).toBeNull();
   expect(data.resource).toEqual([]);
+});
+
+test('无节点选中仍可管理候选，应用与清除禁用；只读、锁定和保存准备禁止管理', () => {
+  const { minder, data } = fixture();
+  minder.getSelectedNodes = () => [];
+  let group;
+  const mount = props => act(() => { ReactDOM.render(<TagGroup ref={v => { group = v; }} minder={minder} tags={['甲']} {...props} />, holder); });
+  mount({});
+  expect(holder.querySelector('.mindmap-tag-button').disabled).toBe(true);
+  expect(holder.querySelector('.mindmap-tag-add').disabled).toBe(false);
+  act(() => { holder.querySelector('.mindmap-tag-remove').click(); });
+  expect(data.resource).toEqual([]);
+  expect(holder.querySelector('[title="甲"]')).toBeNull();
+  for (const props of [{ readOnly: true }, { isLock: true }, { isUserInputAllowed: () => false }]) {
+    mount(props);
+    act(() => { group.setState({ inputValue: '禁止添加' }); });
+    act(() => { group.handleInputConfirm(); });
+    expect(data.tagCatalog.added).not.toContain('禁止添加');
+    expect([...holder.querySelectorAll('button')].every(button => button.disabled)).toBe(true);
+  }
 });

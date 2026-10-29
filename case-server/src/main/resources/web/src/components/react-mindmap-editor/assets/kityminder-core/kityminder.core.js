@@ -2856,6 +2856,8 @@
                 data[field] = patch.value;
               }
             }
+            // 根候选配置是非视觉数据；历史/远端补丁不应为它重绘或重排整图。
+            if (patch.node === minder.getRoot() && patch.dataPath[0] === 'tagCatalog') break;
             if (field == 'expandState') {
               node.renderTree();
             } else {
@@ -7066,25 +7068,19 @@
       var Renderer = _p.r(27);
       Module.register('PriorityModule', function () {
         var minder = this;
-        // Designed by Akikonata
-        // [MASK, BACK]
+        // [浅色背景, 语义文字/边框]
         var PRIORITY_COLORS = [
           null,
-          ['#FF1200', '#840023'], // 1 - red
-          ['#0074FF', '#01467F'], // 2 - blue
-          ['#00AF00', '#006300'], // 3 - green
-          ['#FF962E', '#B25000'], // 4 - orange
-          ['#A464FF', '#4720C4'], // 5 - purple
-          ['#A3A3A3', '#515151'], // 6,7,8,9 - gray
-          ['#A3A3A3', '#515151'],
-          ['#A3A3A3', '#515151'],
-          ['#A3A3A3', '#515151'],
+          ['#fff1f0', '#cf1322'], // 1 - red
+          ['#eff6ff', '#2563eb'], // 2 - blue
+          ['#f0fdf4', '#15803d'], // 3 - green
+          ['#fff7ed', '#c2410c'], // 4 - orange
+          ['#faf5ff', '#7e22ce'], // 5 - purple
+          ['#f8fafc', '#64748b'], // 6,7,8,9 - gray
+          ['#f8fafc', '#64748b'],
+          ['#f8fafc', '#64748b'],
+          ['#f8fafc', '#64748b'],
         ];
-        // hue from 1 to 5
-        // jscs:disable maximumLineLength
-        var BACK_PATH = 'M0,13c0,3.866,3.134,7,7,7h6c3.866,0,7-3.134,7-7V7H0V13z';
-        var MASK_PATH =
-          'M20,10c0,3.866-3.134,7-7,7H7c-3.866,0-7-3.134-7-7V7c0-3.866,3.134-7,7-7h6c3.866,0,7,3.134,7,7V10z';
         var PRIORITY_DATA = 'priority';
         // 优先级图标的图形
         var PriorityIcon = kity.createClass('PriorityIcon', {
@@ -7099,32 +7095,25 @@
             this.width = this.height = size;
           },
           create: function () {
-            var white, back, mask, number;
-            // 4 layer
-            white = new kity.Path().setPathData(MASK_PATH).fill('white');
-            back = new kity.Path().setPathData(BACK_PATH).setTranslate(0.5, 0.5);
-            mask = new kity.Path().setPathData(MASK_PATH).setOpacity(0.8).setTranslate(0.5, 0.5);
+            var back, number;
+            back = new kity.Rect(19, 19, 0.5, 0.5).setRadius(4);
             number = new kity.Text()
-              .setX(this.width / 2 - 0.5)
+              .setX(this.width / 2)
               .setY(this.height / 2)
               .setTextAnchor('middle')
               .setVerticalAlign('middle')
-              .setFontItalic(true)
-              .setFontSize(12)
-              .fill('white');
-            this.addShapes([back, mask, number]);
-            this.mask = mask;
+              .setFontSize(10);
+            this.addShapes([back, number]);
             this.back = back;
             this.number = number;
           },
           setValue: function (value) {
             var back = this.back,
-              mask = this.mask,
               number = this.number;
             var color = PRIORITY_COLORS[value];
             if (color) {
-              back.fill(color[1]);
-              mask.fill(color[0]);
+              back.fill(color[0]).stroke(color[1], 0.7);
+              number.fill(color[1]);
             }
             number.setContent('P' + (value - 1));
           },
@@ -7144,9 +7133,12 @@
           execute: function (km, value) {
             var nodes = km.getSelectedNodes();
             for (var i = 0; i < nodes.length; i++) {
-              nodes[i].setData(PRIORITY_DATA, value || null).render();
+              if (value) nodes[i].setData(PRIORITY_DATA, value);
+              else delete nodes[i].data[PRIORITY_DATA];
+              nodes[i].render();
             }
-            if (!km._largeMindMap) km.layout();
+            // 大图同样需要重排；layout 会进入既有分片调度，不同步整树渲染。
+            km.layout();
           },
           queryValue: function (km) {
             var nodes = km.getSelectedNodes();
@@ -7181,8 +7173,8 @@
                   y;
                 icon.setValue(data);
                 x = box.left - icon.width - spaceLeft;
-                y = -icon.height / 2;
-                icon.setTranslate(x + icon.width / 2, y + icon.height / 2);
+                y = box.y + (box.height - icon.height) / 2;
+                icon.setTranslate(x, y);
                 return new kity.Box({
                   x: x,
                   y: y,
@@ -7566,6 +7558,11 @@
           base: Command,
           execute: function (minder, resource, operation) {
             var nodes = minder.getSelectedNodes();
+            var root = minder.getRoot();
+            var catalog = root.getData('tagCatalog') || {};
+            var added = Array.isArray(catalog.added) ? catalog.added.slice() : [];
+            var removedTags = Array.isArray(catalog.removed) ? catalog.removed : [];
+            var catalogChanged = false;
             var removed = operation === 'remove' && typeof resource === 'string' ? resource.trim() : '';
             if (typeof resource == 'string') {
               resource = [resource];
@@ -7575,6 +7572,19 @@
                 ? (node.getData('resource') || []).filter(function (tag) {
                   return !removed || typeof tag !== 'string' || tag.trim() !== removed;
                 }) : resource;
+              // 旧图没有候选配置时，节点清除不应顺带删除最后一次发现的候选。
+              // 与 resource 在同一命令事务落盘，加载不写库，撤销只需一次。
+              (node.getData('resource') || []).forEach(function (tag) {
+                if (typeof tag !== 'string' || !tag.trim()) return;
+                tag = tag.trim();
+                var retained = Array.isArray(value) && value.some(function (item) {
+                  return typeof item === 'string' && item.trim() === tag;
+                });
+                if (!retained && added.indexOf(tag) < 0 && removedTags.indexOf(tag) < 0) {
+                  added.push(tag);
+                  catalogChanged = true;
+                }
+              });
               if (value == null || (Array.isArray(value) && value.length === 0)) {
                 delete node.data.resource;
               } else {
@@ -7582,6 +7592,7 @@
               }
               node.render();
             });
+            if (catalogChanged) root.setData('tagCatalog', { added: added, removed: removedTags.slice() });
             minder.layout(200);
           },
           queryValue: function (minder) {
@@ -7601,6 +7612,30 @@
           queryState: function (km) {
             return km.getSelectedNode() ? 0 : -1;
           },
+        });
+        // 当前用例的候选配置与节点 resource 独立；根 data 自动参与导出、补丁和历史。
+        var TagCatalogCommand = kity.createClass('TagCatalogCommand', {
+          base: Command,
+          execute: function (minder, value, operation) {
+            if (typeof value !== 'string' || !value.trim()) return;
+            value = value.trim();
+            var root = minder.getRoot();
+            var catalog = root.getData('tagCatalog') || {};
+            var clean = function (values) {
+              return (Array.isArray(values) ? values : []).filter(function (tag, index, all) {
+                return typeof tag === 'string' && tag.trim() && all.indexOf(tag) === index;
+              });
+            };
+            var added = clean(catalog.added).filter(function (tag) { return tag !== value; });
+            var removed = clean(catalog.removed).filter(function (tag) { return tag !== value; });
+            if (operation === 'remove') removed.push(value);
+            else added.push(value);
+            root.setData('tagCatalog', { added: added, removed: removed });
+          },
+          queryValue: function (minder) {
+            return minder.getRoot().getData('tagCatalog') || {};
+          },
+          queryState: function () { return 0; },
         });
         /**
          * @class 资源的覆盖图形
@@ -7664,13 +7699,13 @@
               this.lastResourceName = resourceName;
               this.lastBox = box;
             }
-            text.setX(paddingX).fill(color.dec('l', 70));
+            text.setX(paddingX).fill('#475569');
             rect = this.rect;
             rect.setPosition(0, box.y - paddingY);
             this.width = Math.round(box.width + paddingX * 2);
             this.height = Math.round(box.height + paddingY * 2);
             rect.setSize(this.width, this.height).setRadius(borderRadius);
-            rect.fill(color);
+            rect.fill('#f1f5f9').stroke('#cbd5e1', 0.7);
             this.removeY = box.y - paddingY + 1;
             this.node.setAttribute('aria-label', '标签：' + resourceName);
             if (this.removeButton) {
@@ -7734,6 +7769,7 @@
         return {
           commands: {
             resource: ResourceCommand,
+            tagcatalog: TagCatalogCommand,
           },
           renderers: {
             right: ResourceRenderer,

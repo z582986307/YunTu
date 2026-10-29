@@ -4,7 +4,7 @@ const fs = require('fs');
 const http = require('http');
 const path = require('path');
 const root = path.resolve(__dirname, '../../../../../..');
-const output = path.join(root, 'temp/tag-delete-collapse');
+const output = process.env.BROWSER_EVIDENCE_OUTPUT || path.join(root, 'temp/tag-delete-collapse');
 const puppeteer = require(path.join(root, '项目依赖/YunTu-Web/node_modules/puppeteer-core'));
 
 async function main() {
@@ -59,14 +59,14 @@ async function main() {
       return { a: m.getNodeById('a').getData('resource'), b: m.getNodeById('b').getData('resource') };
     });
     await page.click('[aria-label="展开外观"]');
-    await page.click('[aria-label="清除标签：历史空格标签"]');
+    await page.click('[aria-label="删除可用标签：历史空格标签"]');
     evidence.toolbarTrim = await page.evaluate(() => window.testEditor.minder.getNodeById('a').getData('resource'));
-    assert.deepStrictEqual(evidence.toolbarTrim, ['标签乙'], '真实工具栏应按规范化显示身份删除历史空格标签');
+    assert.deepStrictEqual(evidence.toolbarTrim, ['标签乙', ' 历史空格标签 '], '真实工具栏删除候选不得删除节点历史空格标签');
     await page.click('.mindmap-tag-add');
     await page.type('[aria-label="新标签名称"]', '浏览器新增标签');
     await page.keyboard.press('Enter');
     await page.click('[aria-label="应用标签：浏览器新增标签"]');
-    const candidate = '[aria-label="清除标签：浏览器新增标签"]';
+    const candidate = '[aria-label="删除可用标签：浏览器新增标签"]';
     await page.hover('[aria-label="已应用标签：浏览器新增标签"]');
     evidence.toolbar = await page.$eval(candidate, button => {
       const box = button.getBoundingClientRect(), tag = button.parentElement.getBoundingClientRect();
