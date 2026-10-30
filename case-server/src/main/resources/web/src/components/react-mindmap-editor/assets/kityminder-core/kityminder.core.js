@@ -7706,27 +7706,31 @@
             this.node.addEventListener('mouseenter', ensureRemoveButton);
             this.node.addEventListener('focus', ensureRemoveButton);
           },
-          setValue: function (resourceName, color) {
-            var paddingX = 8,
-              paddingY = 4,
+          setValue: function (resourceName, color, fontSize) {
+            var paddingX = 6,
+              paddingY = 2,
               borderRadius = 4;
             var text, box, rect;
             text = this.text;
-            if (resourceName == this.lastResourceName) {
+            text.setFontSize(fontSize);
+            if (resourceName == this.lastResourceName && fontSize === this.lastFontSize) {
               box = this.lastBox;
             } else {
               text.setContent(resourceName);
               box = text.getBoundaryBox();
               this.lastResourceName = resourceName;
+              this.lastFontSize = fontSize;
               this.lastBox = box;
             }
-            text.setX(paddingX).fill('#475569');
+            var hue = color.get('h');
+            text.setX(paddingX).fill(kity.Color.createHSL(hue, 60, 28));
             rect = this.rect;
             rect.setPosition(0, box.y - paddingY);
             this.width = Math.round(box.width + paddingX * 2);
             this.height = Math.round(box.height + paddingY * 2);
+            this.top = box.y - paddingY;
             rect.setSize(this.width, this.height).setRadius(borderRadius);
-            rect.fill('#f1f5f9').stroke('#cbd5e1', 0.7);
+            rect.fill(kity.Color.createHSL(hue, 65, 94)).stroke(kity.Color.createHSL(hue, 45, 78), 0.7);
             this.removeY = box.y - paddingY + 1;
             this.node.setAttribute('aria-label', '标签：' + resourceName);
             if (this.removeButton) {
@@ -7762,6 +7766,7 @@
             }
             var minder = node.getMinder();
             var i, overlay, x;
+            var fontSize = Math.max(6, Math.min(11, (Number(node.getData('font-size') || node.getStyle('font-size')) || 12) - 2));
             x = 0;
             for (i = 0; i < resource.length; i++) {
               x += spaceRight;
@@ -7773,17 +7778,18 @@
               }
               overlay.setVisible(true);
               overlay.resourceTarget = { minder: minder, node: node, resource: resource[i] };
-              overlay.setValue(resource[i], minder.getResourceColor(resource[i]));
-              overlay.setTranslate(x, -1);
+              overlay.setValue(resource[i], minder.getResourceColor(resource[i]), fontSize);
+              overlay.setTranslate(x, box.cy - overlay.top - overlay.height / 2);
               x += overlay.width;
             }
             while ((overlay = overlays[i++])) overlay.setVisible(false);
             container.setTranslate(box.right, 0);
             return new kity.Box({
               x: box.right,
-              y: Math.round(-overlays[0].height / 2),
+              // 标签在既有节点内边距中居中，只扩展横向占位，不把字体实际字形高度再次叠加进节点高度。
+              y: box.y,
               width: x,
-              height: overlays[0].height,
+              height: box.height,
             });
           },
         });
